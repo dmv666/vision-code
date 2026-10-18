@@ -15,6 +15,20 @@ python -m vj configs/showcase/cyber_hyperdrive.json                 # render fin
 python -m vj configs/hex_tunnel.json --set palette.preset=acid --set output.fps=30 -o renders/acid.mp4
 ```
 
+`--set` cambia cualquier valor sin editar el archivo. En las capas se entra por
+índice o por nombre de patrón:
+
+```bash
+python -m vj configs/showcase/liquid_temple.json \
+  --set layers.particle_sphere.params.count=1200 \
+  --set layers.kaleidoscope.palette.preset=acid \
+  --set layers.-1.opacity=0.8 \
+  --set animation.bpm=128 --set animation.bars=16 -o renders/liquid_variante.mov
+```
+
+Si un patrón aparece dos veces (p. ej. dos `hex_tunnel` en `techno_prism`), usa
+el índice (`layers.0`, `layers.1`); el error te indica cuáles hay.
+
 ## Instalación en macOS (Apple Silicon o Intel)
 
 ```bash

@@ -83,8 +83,30 @@ def _read_file(path: Path) -> dict:
     return json.loads(text)
 
 
+def _list_index(items: list, part: str, path: str) -> int:
+    """Índice en una lista por número (`2`, `-1`) o, en `layers`, por nombre de patrón."""
+    try:
+        idx = int(part)
+    except ValueError:
+        matches = [i for i, it in enumerate(items) if isinstance(it, dict) and it.get("pattern") == part]
+        if len(matches) == 1:
+            return matches[0]
+        names = [it.get("pattern") for it in items if isinstance(it, dict)]
+        if not matches:
+            raise ConfigError(f"{path}: no hay ningún elemento {part!r} (hay: {names})")
+        raise ConfigError(f"{path}: {part!r} aparece {len(matches)} veces, usa el índice "
+                          f"({', '.join(f'{path}.{i}' for i in matches)})")
+    if not -len(items) <= idx < len(items):
+        raise ConfigError(f"{path}: índice {idx} fuera de rango (hay {len(items)} elementos: 0..{len(items) - 1})")
+    return idx % len(items)
+
+
 def apply_override(cfg: dict, expr: str) -> None:
-    """Aplica `ruta.con.puntos=valor` (valor en JSON o texto plano)."""
+    """Aplica `ruta.con.puntos=valor` (valor en JSON o texto plano).
+
+    En listas se entra por índice o, para capas, por nombre de patrón:
+    `layers.2.params.count=1200` o `layers.particle_sphere.params.count=1200`.
+    """
     if "=" not in expr:
         raise ConfigError(f"--set espera clave=valor, recibido: {expr!r}")
     key, raw = expr.split("=", 1)
@@ -92,11 +114,28 @@ def apply_override(cfg: dict, expr: str) -> None:
         value = json.loads(raw)
     except json.JSONDecodeError:
         value = raw
-    node = cfg
     parts = key.strip().split(".")
-    for p in parts[:-1]:
-        node = node.setdefault(p, {})
-    node[parts[-1]] = value
+    node = cfg
+    path = ""
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        if isinstance(node, list):
+            idx = _list_index(node, part, path)
+            if last:
+                node[idx] = value
+            else:
+                node = node[idx]
+        elif isinstance(node, dict):
+            if last:
+                node[part] = value
+            elif part == "layers" and part not in node:
+                raise ConfigError(f"--set {key}: este config no usa 'layers'; "
+                                  f"su patrón se ajusta con geometry.params.<clave>")
+            else:
+                node = node.setdefault(part, {})
+        else:
+            raise ConfigError(f"--set {key}: {path!r} es un valor ({node!r}), no se puede entrar en él")
+        path = f"{path}.{part}" if path else part
 
 
 def load_config(path: str | Path, overrides: list[str] | None = None) -> dict:
