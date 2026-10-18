@@ -14,6 +14,8 @@ uniform float u_fog;
 uniform float u_grid;
 uniform float u_pulse_speed;
 uniform float u_panel_density;
+uniform float u_streams;       // intensidad de los "flujos de datos" por las aristas
+uniform float u_stream_speed;  // velocidad relativa al avance (se redondea a ciclos enteros)
 
 void main() {
     vec2 uv = centered_uv();
@@ -75,13 +77,23 @@ void main() {
     // Onda de pulso que viaja hacia el fondo del túnel.
     float wave = pulse(z * u_pulse_speed);
 
+    // Flujos de datos: guiones de luz que corren por las líneas longitudinales.
+    // Coordenada en profundidad de CÁMARA + m·p, con m entero → periódico para
+    // cualquier tamaño de guion (en coordenadas de mundo dependería de u_travel).
+    float m = floor(u_travel * u_stream_speed + 0.5);
+    float lane = face * (u_grid + 1.0) + floor(g + 0.5);
+    float q = z / u_segment * 0.35 - m * u_phase + hash11(lane * 3.7);
+    float dash = smoothstep(0.82, 0.97, fract(q)) * step(hash11(lane * 9.1), 0.6);
+    float streams = dash * max(edges, grid * 1.5) * u_streams * (1.0 - far);
+
     // Color: depende de profundidad de CÁMARA (z), cara y fase → periódico.
     float hue = z * 0.025 + face / u_sides * 0.35 + u_hue_cycles * u_phase;
     vec3 c_a = palette(hue);
     vec3 c_b = palette(hue + 0.5);
 
     vec3 col = c_a * (rings * (1.0 + 2.0 * u_pulse_strength * wave) + glow)
-             + c_b * (edges * 0.9 + grid * 0.3 + subs * 0.12 + panel);
+             + c_b * (edges * 0.9 + grid * 0.3 + subs * 0.12 + panel)
+             + mix(c_a, vec3(1.0), 0.5) * streams * 4.0;
 
     col *= exp(-z / u_fog);
     // Resplandor del punto de fuga, latiendo con el kick.

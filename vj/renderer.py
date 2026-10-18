@@ -7,6 +7,7 @@ from pathlib import Path
 
 import moderngl
 
+from .config import layers_of
 from .loop import LoopPlan
 from .palette import resolve_palette
 from .patterns import resolve_pattern
@@ -50,6 +51,42 @@ def set_uniforms(prog: moderngl.Program, values: dict) -> None:
             uniform.value = value
 
 
+class Layer:
+    def __init__(self, ctx: moderngl.Context, index: int, spec: dict, cfg: dict, plan: LoopPlan,
+                 size: tuple[int, int], blur_samples: int):
+        self.name = f"layers[{index}]:{spec['pattern']}"
+        shader_file, params = resolve_pattern(spec)
+        self.prog = ctx.program(vertex_shader=VERTEX_SHADER, fragment_shader=load_shader(shader_file))
+        self.vao = ctx.vertex_array(self.prog, [])
+
+        unknown = [k for k in params if f"u_{k}" not in self.prog]
+        if unknown:
+            print(f"[vj] aviso: {self.name}: parámetros sin efecto: {unknown}", file=sys.stderr)
+
+        anim = cfg["animation"]
+        if spec.get("animation"):
+            counters = plan.layer_uniforms({**anim, **spec["animation"]}, self.name, explicit=set())
+        else:
+            counters = {**plan.uniforms(), "u_pulse_strength": float(anim["pulse_strength"]),
+                        "u_pulse_decay": float(anim["pulse_decay"])}
+        palette = resolve_palette({**cfg["palette"], **spec["palette"]} if spec.get("palette") else cfg["palette"])
+        if index > 0:
+            palette["u_background"] = (0.0, 0.0, 0.0)  # el fondo lo pone solo la primera capa
+        set_uniforms(self.prog, {
+            "u_resolution": (float(size[0]), float(size[1])),
+            # Opacidad perceptual: la mezcla es aditiva en luz lineal y la gamma
+            # haría que 0.1 se viera como ~35 %. Elevar a 2.2 la hace actuar como un fader.
+            "u_weight": float(spec.get("opacity", 1.0)) ** 2.2 / blur_samples,
+            **counters,
+            **palette,
+            **{f"u_{k}": float(v) for k, v in params.items()},
+        })
+
+    def draw(self, phase: float) -> None:
+        self.prog["u_phase"].value = phase
+        self.vao.render(moderngl.TRIANGLES, vertices=3)
+
+
 class Renderer:
     def __init__(self, cfg: dict, plan: LoopPlan, width: int | None = None, height: int | None = None):
         out = cfg["output"]
@@ -67,24 +104,13 @@ class Renderer:
             raise RuntimeError(f"{self.width * self.ss}px supera GL_MAX_TEXTURE_SIZE={max_tex}; "
                                f"reduce output.supersample")
 
-        shader_file, params = resolve_pattern(cfg["geometry"])
-        self.pattern = self.ctx.program(vertex_shader=VERTEX_SHADER, fragment_shader=load_shader(shader_file))
+        size = (self.width * self.ss, self.height * self.ss)
+        self.layers = [Layer(self.ctx, i, spec, cfg, plan, size, self.blur_samples)
+                       for i, spec in enumerate(layers_of(cfg))]
+
+        post = cfg["post"]
+        self.bloom = float(post["bloom"]) > 0
         self.post = self.ctx.program(vertex_shader=VERTEX_SHADER, fragment_shader=load_shader("post.frag"))
-
-        unknown = [k for k in params if f"u_{k}" not in self.pattern]
-        if unknown:
-            print(f"[vj] aviso: parámetros sin efecto en este shader: {unknown}", file=sys.stderr)
-
-        anim, post = cfg["animation"], cfg["post"]
-        set_uniforms(self.pattern, {
-            "u_resolution": (float(self.width * self.ss), float(self.height * self.ss)),
-            "u_pulse_strength": float(anim["pulse_strength"]),
-            "u_pulse_decay": float(anim["pulse_decay"]),
-            "u_weight": 1.0 / self.blur_samples,
-            **plan.uniforms(),
-            **resolve_palette(cfg["palette"]),
-            **{f"u_{k}": float(v) for k, v in params.items()},
-        })
         set_uniforms(self.post, {
             "u_out_res": (float(self.width), float(self.height)),
             "u_ss": self.ss,
@@ -92,17 +118,20 @@ class Renderer:
             "u_vignette": float(post["vignette"]),
             "u_grain": float(post["grain"]),
             "u_ca": float(post["chromatic_aberration"]),
+            "u_bloom": float(post["bloom"]),
+            "u_bloom_radius": float(post["bloom_radius"]),
+            "u_saturation": float(post["saturation"]),
+            "u_contrast": float(post["contrast"]),
             "u_accum": 0,
         })
 
-        # Acumulador HDR (half float) a resolución supersampleada.
-        self.accum = self.ctx.texture((self.width * self.ss, self.height * self.ss), 4, dtype="f2")
-        self.accum.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        # Acumulador HDR (half float) a resolución supersampleada. Sus mipmaps
+        # (versiones reducidas a 1/2, 1/4, 1/8...) son la base del bloom.
+        self.accum = self.ctx.texture(size, 4, dtype="f2")
+        self.accum.filter = ((moderngl.LINEAR_MIPMAP_LINEAR if self.bloom else moderngl.LINEAR), moderngl.LINEAR)
         self.accum.repeat_x = self.accum.repeat_y = False
         self.accum_fbo = self.ctx.framebuffer(color_attachments=[self.accum])
         self.out_fbo = self.ctx.simple_framebuffer((self.width, self.height), components=4)
-
-        self.pattern_vao = self.ctx.vertex_array(self.pattern, [])
         self.post_vao = self.ctx.vertex_array(self.post, [])
 
     def render(self, frame: int, wrap: bool = True) -> bytes:
@@ -111,14 +140,17 @@ class Renderer:
         self.accum_fbo.use()
         self.accum_fbo.clear(0.0, 0.0, 0.0, 0.0)
         self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.ONE, moderngl.ONE
+        self.ctx.blend_func = moderngl.ONE, moderngl.ONE   # mezcla aditiva (luz sobre luz)
         for j in range(n):
             # Sub-frames centrados en el frame. Como la fase se envuelve con %1,
             # el motion blur del último frame "ve" el inicio del loop: sin costura.
             offset = ((j + 0.5) / n - 0.5) * self.shutter if n > 1 else 0.0
-            self.pattern["u_phase"].value = self.plan.phase(frame + offset, wrap)
-            self.pattern_vao.render(moderngl.TRIANGLES, vertices=3)
+            phase = self.plan.phase(frame + offset, wrap)
+            for layer in self.layers:
+                layer.draw(phase)
         self.ctx.disable(moderngl.BLEND)
+        if self.bloom:
+            self.accum.build_mipmaps()
 
         self.out_fbo.use()
         self.accum.use(location=0)

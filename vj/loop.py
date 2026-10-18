@@ -41,6 +41,35 @@ class LoopPlan:
             "u_beats": float(self.beats),
         }
 
+    def layer_uniforms(self, anim: dict, name: str, explicit: set[str] | None = None) -> dict[str, float]:
+        """Contadores de una capa con su propia animación (ya fusionada con la global).
+
+        La duración y el tempo son comunes; velocidad, rotación, etc. se
+        cuantizan por capa. `beat_multiplier` (2 = corcheas, 4 = semicorcheas,
+        0.5 = cada dos golpes) se redondea también a golpes enteros por loop.
+        """
+        explicit = set(anim) if explicit is None else explicit
+        notes = self.notes
+        quiet: list[str] = []  # los valores heredados de la animación global ya se reportaron
+
+        def q(key: str, min_abs: int = 0) -> float:
+            return float(quantize(float(anim[key]), self.duration, f"{name} {key}",
+                                  notes if key in explicit else quiet, min_abs))
+
+        mult = float(anim.get("beat_multiplier", 1))
+        beats = round(self.beats * mult)
+        if self.beats and abs(beats - self.beats * mult) > 1e-6:
+            notes.append(f"{name}: beat_multiplier {mult} → {beats} golpes/loop")
+        return {
+            "u_travel": q("speed", 1) if anim["speed"] else 0.0,
+            "u_rotation": q("rotation"),
+            "u_wobble": q("wobble"),
+            "u_hue_cycles": q("hue_cycles"),
+            "u_beats": float(beats),
+            "u_pulse_strength": float(anim["pulse_strength"]),
+            "u_pulse_decay": float(anim["pulse_decay"]),
+        }
+
 
 def quantize(rate_per_sec: float, duration: float, name: str, notes: list[str],
              min_abs: int = 0) -> int:
@@ -55,7 +84,7 @@ def quantize(rate_per_sec: float, duration: float, name: str, notes: list[str],
     if rate_per_sec != 0 and cycles == 0:
         notes.append(f"{name}: {rate_per_sec}/s × {duration:.3f}s = {exact:.3f} ciclos → 0 "
                      f"(queda estático; súbelo o alarga la duración)")
-    elif abs(exact - cycles) > 1e-6:
+    elif abs(exact - cycles) > 0.01:  # ignora redondeos imperceptibles (0.998 → 1)
         notes.append(f"{name}: {exact:.3f} → {cycles} ciclos/loop "
                      f"(efectivo {cycles / duration:.4f}/s)")
     return int(cycles)

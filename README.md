@@ -1,93 +1,156 @@
 # vision-code — generador de VJ loops
 
-Genera visuales tipo festival (túneles, esferas de partículas, caleidoscopios) en
-4K/60fps como **loops perfectos**, a partir de un archivo JSON/YAML. Renderiza
-con shaders GLSL en la GPU (moderngl, sin ventana) y codifica con ffmpeg
-(H.264 o ProRes) mediante un pipe, sin escribir frames intermedios a disco.
+Genera visuales tipo festival (túneles, esferas de partículas, caleidoscopios,
+hiperespacio, ondas líquidas) en 4K/60fps como **loops perfectos**, a partir de
+un archivo JSON/YAML. Renderiza con shaders GLSL en la GPU (moderngl, sin
+ventana), mezcla varios patrones por capas, y codifica con ffmpeg (H.264, HEVC
+o ProRes, por hardware cuando está disponible) mediante un pipe, sin escribir
+frames intermedios a disco.
 
 ```bash
-pip install -r requirements.txt          # + ffmpeg en el PATH
-python -m vj configs/hex_tunnel.json --plan          # ver el plan del loop (redondeos)
-python -m vj configs/hex_tunnel.json --preview --stills 4   # 4 PNG rápidos a 960x540
-python -m vj configs/hex_tunnel.json --check-loop    # verificación numérica del loop
-python -m vj configs/hex_tunnel.json                 # render final 4K60
+python -m vj configs/showcase/cyber_hyperdrive.json --plan          # plan del loop (redondeos)
+python -m vj configs/showcase/cyber_hyperdrive.json --preview --stills 4   # 4 PNG rápidos a 960x540
+python -m vj configs/showcase/cyber_hyperdrive.json --check-loop    # verificación numérica del loop
+python -m vj configs/showcase/cyber_hyperdrive.json                 # render final 4K60
 python -m vj configs/hex_tunnel.json --set palette.preset=acid --set output.fps=30 -o renders/acid.mp4
 ```
 
-> Linux sin pantalla (servidor/contenedor): usa EGL automáticamente. Con GPU
-> NVIDIA instala el driver con soporte EGL; sin GPU funciona en CPU (Mesa
-> llvmpipe), útil solo para previews.
+## Instalación en macOS (Apple Silicon o Intel)
+
+```bash
+brew install python ffmpeg git              # Homebrew: https://brew.sh
+git clone https://github.com/dmv666/vision-code.git && cd vision-code
+python3 -m venv .venv && source .venv/bin/activate   # repetir "source" en cada Terminal nueva
+pip install -r requirements.txt
+python -m vj configs/showcase/neon_core.json --preview --stills 2 && open renders/
+```
+
+En Mac el export usa **VideoToolbox** (el codificador por hardware del chip)
+automáticamente (`"hardware": "auto"`):
+
+| `codec` | Encoder en Mac | Notas |
+|---|---|---|
+| `h264` | `h264_videotoolbox` | Universal. Bitrate según `quality` (4K60 high ≈ 60 Mbps) |
+| `hevc` | `hevc_videotoolbox` 10 bits | Menos banding y archivos más pequeños; etiqueta `hvc1` (QuickTime) |
+| `prores` | `prores_videotoolbox` | Motor ProRes en M1 Pro/Max/Ultra, M2 y posteriores |
+
+Antes de renderizar se prueba cada encoder con 2 frames reales; si el Mac no
+tiene ese motor (p. ej. ProRes en un M1 base o un Intel antiguo) se usa el
+encoder por software y se avisa en la terminal. `--no-hw` fuerza software
+(libx264/libx265 dan algo más de calidad por bit); `--hw` lo fuerza en Linux/Windows (NVENC).
+Además, la GPU renderiza el frame siguiente mientras ffmpeg codifica el actual.
+
+Ver en bucle: abre el archivo en QuickTime → *Visualización → Repetir* (⌥⌘L).
+
+> Linux sin pantalla (servidor/contenedor): usa EGL automáticamente. Sin GPU
+> funciona en CPU (Mesa llvmpipe), útil solo para previews.
 
 ## 1. Arquitectura
 
 ```
-config.json ──► config.py ──► loop.py ──────────► renderer.py ─────────► encoder.py ──► .mp4/.mov
-  (usuario)     defaults +    velocidades → N      GPU (moderngl):        ffmpeg pipe
-                validación    ciclos ENTEROS        patrón → acumulador    H.264 / ProRes
-                --set         por loop              HDR → post → RGB8
-                              palette.py ─────────►    ▲
-                              patterns.py ────────►  shaders/*.frag
+config.json ──► config.py ──► loop.py ──────────► renderer.py ──────────────► encoder.py ──► .mp4/.mov
+  (usuario)     defaults +    velocidades → N      GPU (moderngl):             prueba encoders
+                validación    ciclos ENTEROS        capa 1 ┐                    (HW → SW), hilo
+                --set         por loop y capa       capa 2 ├► acumulador HDR    + pipe a ffmpeg
+                              palette.py ────────►  capa n ┘   → bloom → post → RGB8
+                              patterns.py ───────►  shaders/*.frag
 ```
 
 | Módulo | Responsabilidad |
 |---|---|
-| `vj/config.py` | Defaults, merge con el JSON/YAML, overrides `--set a.b=valor`, validación |
-| `vj/loop.py` | **Matemática del loop**: frames N, fase, cuantización de velocidades a enteros |
+| `vj/config.py` | Defaults, merge con el JSON/YAML, overrides `--set a.b=valor`, validación, capas |
+| `vj/loop.py` | **Matemática del loop**: frames N, fase, cuantización de velocidades a enteros (global y por capa) |
 | `vj/palette.py` | Presets y hex → RGB lineal |
 | `vj/patterns.py` | Registro de patrones: shader + parámetros por defecto |
-| `vj/renderer.py` | Contexto GL offscreen, supersampling, motion blur por acumulación, post |
-| `vj/encoder.py` | Comandos ffmpeg por codec, PNG para stills |
+| `vj/renderer.py` | Contexto GL offscreen, capas aditivas, supersampling, motion blur, mipmaps para bloom |
+| `vj/encoder.py` | Candidatos por codec, prueba de hardware, escritor en hilo, PNG para stills |
 | `vj/shaders/common.glsl` | Uniforms compartidos, `palette()`, `pulse()`, `line_aa()` |
 | `vj/shaders/<patrón>.frag` | Un archivo por geometría |
-| `vj/shaders/post.frag` | Downsample SSAA, aberración cromática, ACES, viñeta, gamma, grano |
+| `vj/shaders/post.frag` | Downsample SSAA, bloom, aberración cromática, ACES, saturación/contraste, viñeta, gamma, grano |
 
-Por frame: el patrón se dibuja `motion_blur.samples` veces (sub-frames) en un
-buffer float16 a `supersample×` la resolución, sumándose; el post-proceso lo
-reduce a la resolución final, aplica tonemap y lo entrega como RGB24 a ffmpeg.
+Por frame: cada capa se dibuja `motion_blur.samples` veces (sub-frames) en un
+buffer float16 a `supersample×` la resolución, sumándose (mezcla aditiva, como
+luz). Sus mipmaps alimentan el bloom; el post-proceso reduce a la resolución
+final, aplica tonemap y entrega RGB24 a ffmpeg.
 
-**Añadir un patrón** (p. ej. ondas orgánicas): crea `vj/shaders/organic_waves.frag`
-con `#include "common.glsl"`, usa `u_phase` y los contadores enteros, y regístralo
-en `PATTERNS` con sus parámetros. Cada clave de `geometry.params` llega como
-uniform `u_<clave>`.
+### Patrones
+
+| Patrón | Qué es | Parámetros clave |
+|---|---|---|
+| `hex_tunnel` | Túnel poligonal analítico con anillos, rejilla, paneles y flujos de datos | `sides`, `twist`, `grid`, `streams`, `stream_speed`, `panel_density` |
+| `particle_sphere` | Esferas de partículas (Fibonacci) que respiran con el BPM | `count`, `shells`, `size`, `displacement` (coste ∝ count×shells) |
+| `kaleidoscope` | Espejos + pliegues KIFS con zoom infinito log-polar | `segments`, `zoom`, `complexity`, `line_width` (0.002–0.01) |
+| `starfield` | Hiperespacio: capas de estrellas con estelas warp | `layers`, `density`, `streak`, `twinkle` |
+| `organic_waves` | Curvas de nivel de neón sobre ruido con distorsión de dominio | `bands`, `warp`, `scale`, `horizon` (>0 = suelo synthwave) |
+
+**Añadir un patrón**: crea `vj/shaders/<nombre>.frag` con `#include "common.glsl"`,
+usa `u_phase` y los contadores enteros, y regístralo en `PATTERNS` con sus
+parámetros. Cada clave de `params` llega como uniform `u_<clave>`.
+
+### Configs incluidas
+
+- `configs/*.json`: un patrón cada una (punto de partida).
+- `configs/showcase/*.json`: composiciones de 3 capas listas para festival:
+
+| Config | Capas | Estilo |
+|---|---|---|
+| `cyber_hyperdrive` | túnel octogonal con flujos + hiperespacio a corcheas + caleidoscopio | cyberpunk, HEVC |
+| `techno_prism` | túnel triangular + túnel interior a contra-giro + estrellas a semicorcheas | rojo/blanco, golpe seco |
+| `liquid_temple` | ondas líquidas + caleidoscopio helado + esfera de partículas | synthwave, ProRes HQ |
+| `synthwave_horizon` | suelo de neón en perspectiva + cielo estrellado + mandala | sunset |
+| `neon_core` | esfera de 3 capas + mandala de 16 espejos + estrellas | neon |
 
 ## 2. Archivo de configuración
 
 ```jsonc
 {
   "output": {
-    "path": "renders/hex_tunnel.mp4",
+    "path": "renders/cyber_hyperdrive.mp4",
     "width": 3840, "height": 2160, "fps": 60,
     "duration": 16,              // seg; se ignora si animation.bars está definido
-    "codec": "h264",             // h264 | h264_nvenc | prores (→ .mov)
-    "quality": "high",           // h264: draft|high|master · prores: proxy|lt|standard|hq|4444
+    "codec": "hevc",             // h264 | hevc | prores (→ .mov)
+    "quality": "high",           // draft|high|master · prores: proxy|lt|standard|hq|4444|xq
+    "hardware": "auto",          // auto (sí en macOS) | true | false
     "supersample": 2,            // anti-aliasing SSAA 2×2 (4K → buffer de 7680×4320)
-    "motion_blur": { "samples": 4, "shutter": 0.5 }   // shutter 0.5 = 180°
+    "motion_blur": { "samples": 4, "shutter": 0.6 }   // shutter 0.5 = 180°
   },
-  "geometry": {
-    "pattern": "hex_tunnel",     // hex_tunnel | particle_sphere | kaleidoscope
-    "params": { "sides": 6, "twist": 0.06, "grid": 3 }  // ver vj/patterns.py
-  },
-  "palette": {
+  "palette": {                   // paleta global (cada capa puede tener la suya)
     "preset": "cyberpunk",       // neon | cyberpunk | synthwave | acid | dark_techno | ice | sunset
     "colors": ["#ff2a6d", "#05d9e8"],  // opcional: sustituye al preset (máx. 8, gradiente cíclico)
     "background": "#01012b",
-    "intensity": 1.2             // brillo HDR antes del tonemap
+    "intensity": 1.25            // brillo HDR antes del tonemap
   },
-  "animation": {
+  "animation": {                 // animación global (cada capa puede sobrescribir campos)
     "bpm": 128, "bars": 8, "beats_per_bar": 4,   // bars → duración exacta en compases
     "speed": 2.0,                // avance espacial (segmentos/capas por segundo)
-    "rotation": 0.0625,          // vueltas por segundo
-    "wobble": 0.125,             // oscilaciones secundarias por segundo
+    "rotation": 0.0667,          // vueltas por segundo
+    "wobble": 0.133,             // oscilaciones secundarias por segundo
     "hue_cycles": 0.0,           // vueltas de paleta por segundo
-    "pulse_strength": 0.7, "pulse_decay": 5.0
+    "pulse_strength": 0.75, "pulse_decay": 5.5
   },
-  "post": { "exposure": 1.1, "vignette": 0.4, "grain": 0.015, "chromatic_aberration": 0.0015 }
+  "layers": [                    // o un solo patrón con "geometry": {"pattern", "params"}
+    { "pattern": "hex_tunnel", "params": { "sides": 8, "streams": 0.9 } },
+    {
+      "pattern": "starfield",
+      "opacity": 0.9,            // perceptual (como un fader de mesa de VJ)
+      "params": { "streak": 4.0 },
+      "palette": { "colors": ["#ffffff", "#05d9e8"] },
+      "animation": { "speed": 0.8, "rotation": -0.0667, "beat_multiplier": 2 }  // 2 = corcheas
+    }
+  ],
+  "post": {
+    "exposure": 1.0, "bloom": 0.6, "bloom_radius": 1.1,
+    "vignette": 0.45, "grain": 0.015, "chromatic_aberration": 0.002,
+    "saturation": 1.1, "contrast": 1.05
+  }
 }
 ```
 
 Las velocidades se expresan en unidades "humanas" (por segundo / BPM) y
-`loop.py` las ajusta al entero de ciclos más cercano. `--plan` muestra cada
-ajuste, p. ej. `rotation: 0.938 → 1 ciclos/loop (efectivo 0.0667/s)`.
+`loop.py` las ajusta al entero de ciclos más cercano, también por capa.
+`--plan` muestra cada ajuste, p. ej. `rotation: 0.938 → 1 ciclos/loop (efectivo 0.0667/s)`.
+Todas las capas comparten duración y tempo, así que la composición entera
+sigue siendo un loop perfecto.
 
 ## 3. Matemática del loop perfecto
 
@@ -150,6 +213,10 @@ combinaciones donde `compases · 4 · 60 · fps / BPM` sea entero (128 BPM: 8 co
   detrás en el frame 0. Si su color o su parpadeo dependieran de `hash(id)`, el
   frame N mostraría colores distintos. Solución: `hash(mod(id, L))`, o hacer que
   el color dependa de la profundidad de cámara, no del mundo.
+- **Velocidades derivadas dentro del shader.** Los flujos de datos del túnel
+  corren a `stream_speed × travel`; el shader usa `floor(travel·stream_speed + 0.5)`
+  para que siga siendo un entero. En las ondas orgánicas el pulso usa la altura
+  del ruido, no `floor(banda)`, porque el índice de banda avanza `travel` por loop.
 - **Efectos que acumulan con el avance.** Un twist en coordenadas de mundo gira
   `twist · L · S` radianes por loop, que no es múltiplo de `2π/lados` → salto. Se
   aplica en coordenadas de cámara.
@@ -171,12 +238,13 @@ da ~49 y el comando falla con código 1 — útil en CI o en un batch de renders
 
 ## 4. Notas de producción
 
-- **Tiempo de render 4K60** con SSAA 2× y motion blur 4: el patrón se evalúa
-  4 × 33 M píxeles por frame. En una GPU moderna son milisegundos para el túnel
-  y el caleidoscopio; `particle_sphere` es O(partículas) por píxel (bájalo con
-  `count`/`shells` o `supersample: 1` si va lento). Usa `--preview` para iterar.
+- **Tiempo de render 4K60** con SSAA 2× y motion blur 4: cada capa se evalúa
+  4 × 33 M píxeles por frame. Túnel, caleidoscopio y ondas son baratos;
+  `starfield` cuesta ∝ `layers`; `particle_sphere` es O(partículas) por píxel
+  (bájalo con `count`/`shells`, `supersample: 1` o menos `motion_blur.samples`
+  si va lento). La terminal muestra fps y ETA; usa `--preview` para iterar.
 - **Codec.** H.264 `yuv420p` es universal pero en degradados oscuros puede
-  haber banding: el `grain` hace de dithering. ProRes HQ (10 bits 4:2:2) es la
+  haber banding: el `grain` hace de dithering. HEVC 10 bits lo reduce mucho. ProRes HQ (10 bits 4:2:2) es la
   opción de máster; ProRes 4444 si necesitas más calidad de color. Para Resolume
   el formato óptimo es **DXV**/HAP: renderiza ProRes y transcodifica con Alley o
   `ffmpeg -c:v hap`.

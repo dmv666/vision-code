@@ -8,8 +8,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import ConfigError, load_config
-from .encoder import FFmpegWriter, resolve_output_path, save_png
+from .config import ConfigError, layers_of, load_config, wants_hardware
+from .encoder import FFmpegWriter, resolve_output_path, save_png, select_encoder
 from .loop import plan_loop
 from .renderer import Renderer
 
@@ -27,6 +27,11 @@ def parse_args(argv=None):
     ap.add_argument("--check-loop", action="store_true",
                     help="verifica numéricamente que el loop cierra sin costura y sale")
     ap.add_argument("--plan", action="store_true", help="muestra el plan del loop y sale")
+    hw = ap.add_mutually_exclusive_group()
+    hw.add_argument("--hw", dest="hardware", action="store_const", const=True,
+                    help="fuerza encoder por hardware (VideoToolbox en Mac, NVENC en NVIDIA)")
+    hw.add_argument("--no-hw", dest="hardware", action="store_const", const=False,
+                    help="fuerza encoder por software (máxima calidad por bit)")
     return ap.parse_args(argv)
 
 
@@ -71,6 +76,8 @@ def main(argv=None) -> int:
     overrides += args.set  # --set gana sobre --preview
     if args.output:
         overrides.append(f"output.path={args.output}")
+    if args.hardware is not None:
+        overrides.append(f"output.hardware={'true' if args.hardware else 'false'}")
     try:
         cfg = load_config(args.config, overrides)
         plan = plan_loop(cfg)
@@ -79,7 +86,13 @@ def main(argv=None) -> int:
         return 2
 
     out = cfg["output"]
-    print(f"[vj] {cfg['geometry']['pattern']} · {out['width']}x{out['height']} @ {plan.fps}fps · "
+    layers = layers_of(cfg)
+    for i, layer in enumerate(layers):
+        if layer.get("animation"):  # cuantiza ya para mostrar los redondeos por capa
+            plan.layer_uniforms({**cfg["animation"], **layer["animation"]}, f"layers[{i}]:{layer['pattern']}",
+                                explicit=set(layer["animation"]))
+    names = " + ".join(f"{l['pattern']}" + (f"×{l['opacity']}" if "opacity" in l else "") for l in layers)
+    print(f"[vj] {names} · {out['width']}x{out['height']} @ {plan.fps}fps · "
           f"{plan.frames} frames ({plan.duration:.3f}s) · SSAA {out['supersample']}x · "
           f"motion blur {out['motion_blur']['samples']} muestras")
     print(f"[vj] ciclos/loop: travel={plan.travel} rotation={plan.rotation} wobble={plan.wobble} "
@@ -105,8 +118,11 @@ def main(argv=None) -> int:
             return 0
 
         path = resolve_output_path(out["path"], out["codec"])
+        encoder = select_encoder(out["codec"], out["quality"], renderer.width, renderer.height,
+                                 plan.fps, wants_hardware(out))
+        print(f"[vj] encoder: {encoder.label()}")
         t0 = time.perf_counter()
-        with FFmpegWriter(path, renderer.width, renderer.height, plan.fps, out["codec"], out["quality"]) as w:
+        with FFmpegWriter(path, renderer.width, renderer.height, plan.fps, encoder) as w:
             # Frames 0..N-1. NUNCA el frame N: es idéntico al 0 y duplicarlo
             # produce un "tartamudeo" de un frame en cada vuelta del loop.
             for i in range(plan.frames):

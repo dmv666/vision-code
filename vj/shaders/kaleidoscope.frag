@@ -26,23 +26,27 @@ void main() {
 
     // Pliegues iterativos (KIFS) con rotación periódica.
     int iters = int(u_complexity);
+    float sc = 1.0;                                 // escala acumulada del pliegue
     for (int i = 0; i < iters; ++i) {
         f = abs(f) - 0.22;
         f = rot(0.6 + 0.35 * sin(th * u_wobble + float(i) * 1.9)) * f;
         f *= 1.25;
+        sc *= 1.25;
     }
 
     // Hexágono + círculo en el espacio plegado.
     vec2 h = abs(f);
-    float hex = max(dot(h, normalize(vec2(1.0, 1.7320508))), h.x) - 0.28;
-    float circ = length(f) - 0.12 - 0.05 * u_pulse_strength * kick;
+    // Distancias divididas por `sc`: vuelven a la escala de la celda, así
+    // line_width significa lo mismo con cualquier `complexity`.
+    float hex = (max(dot(h, normalize(vec2(1.0, 1.7320508))), h.x) - 0.28) / sc;
+    float circ = (length(f) - 0.12 - 0.05 * u_pulse_strength * kick) / sc;
     float fw_h = fwidth(hex);
     float fw_c = fwidth(circ);
 
     float lw = u_line_width * (1.0 + 0.6 * u_pulse_strength * kick);
     float l1 = line_aa(abs(hex), lw, fw_h, 0.5);
     float l2 = line_aa(abs(circ), lw * 0.6, fw_c, 0.5);
-    float glow = exp(-abs(hex) / (lw * 1.5)) * 0.2 * (1.0 - smoothstep(0.1, 0.5, fw_h / 0.5));
+    float glow = exp(-abs(hex) / (lw * 1.5)) * 0.12 * (1.0 - smoothstep(0.1, 0.5, fw_h / 0.5));
 
     float wave = pulse(-lr * 0.35);                 // anillos de pulso hacia afuera
     float hue = lr * 0.3 + a * 0.4 + u_hue_cycles * u_phase;

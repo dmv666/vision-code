@@ -1,0 +1,41 @@
+{
+  "output": {
+    "path": "renders/liquid_temple.mov",
+    "width": 3840, "height": 2160, "fps": 60,
+    "codec": "prores", "quality": "hq", "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": { "samples": 2, "shutter": 0.5 }
+  },
+  "palette": { "preset": "synthwave", "intensity": 1.2 },
+  "animation": {
+    "bpm": 120, "bars": 8,
+    "speed": 0.5, "rotation": 0.0625, "wobble": 0.0625, "hue_cycles": 0.0625,
+    "pulse_strength": 0.6, "pulse_decay": 4.0
+  },
+  "layers": [
+    {
+      "pattern": "organic_waves",
+      "params": { "scale": 1.3, "bands": 12, "warp": 1.8, "line_width": 0.02, "flow_radius": 0.7 },
+      "animation": { "rotation": 0 }
+    },
+    {
+      "pattern": "kaleidoscope",
+      "opacity": 0.5,
+      "params": { "segments": 12, "zoom": 0.6, "complexity": 3, "line_width": 0.003 },
+      "palette": { "preset": "ice" },
+      "animation": { "speed": 0.25, "rotation": -0.0625 }
+    },
+    {
+      "pattern": "particle_sphere",
+      "opacity": 1.0,
+      "params": { "count": 160, "shells": 2, "size": 0.005, "camera_distance": 4.5, "displacement": 0.1 },
+      "palette": { "colors": ["#ffffff", "#4cc9f0", "#f72585"] },
+      "animation": { "rotation": 0.125, "wobble": 0.125 }
+    }
+  ],
+  "post": {
+    "exposure": 1.05, "bloom": 0.5, "bloom_radius": 1.2,
+    "vignette": 0.4, "grain": 0.012, "chromatic_aberration": 0.0015,
+    "saturation": 1.05, "contrast": 1.05
+  }
+}

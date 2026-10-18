@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +14,13 @@ DEFAULTS: dict[str, Any] = {
         "height": 2160,
         "fps": 60,
         "duration": 16.0,          # segundos (se ignora si animation.bars está definido)
-        "codec": "h264",           # h264 | h264_nvenc | prores
-        "quality": "high",         # draft | high | master  (prores: proxy | lt | standard | hq | 4444)
+        "codec": "h264",           # h264 | hevc | prores
+        "quality": "high",         # draft | high | master  (prores: proxy | lt | standard | hq | 4444 | xq)
+        "hardware": "auto",        # auto (= sí en macOS) | true | false  → VideoToolbox / NVENC
         "supersample": 2,          # SSAA: renderiza a N×N y reduce (anti-aliasing)
         "motion_blur": {"samples": 1, "shutter": 0.5},  # samples=1 desactiva
     },
+    # Un solo patrón con "geometry", o varios mezclados con "layers" (ver README).
     "geometry": {
         "pattern": "hex_tunnel",
         "params": {},
@@ -44,10 +47,15 @@ DEFAULTS: dict[str, Any] = {
         "vignette": 0.35,
         "grain": 0.015,            # además de textura, hace dithering contra el banding de 8 bits
         "chromatic_aberration": 0.0015,
+        "bloom": 0.35,             # intensidad del resplandor (0 = off)
+        "bloom_radius": 1.0,       # >1 = halo más amplio
+        "saturation": 1.0,
+        "contrast": 1.0,
     },
 }
 
-VALID_CODECS = {"h264", "h264_nvenc", "prores"}
+VALID_CODECS = {"h264", "hevc", "prores"}
+LEGACY_CODECS = {"h264_nvenc": "h264"}  # codec antiguo → (codec, hardware=True)
 
 
 class ConfigError(ValueError):
@@ -100,15 +108,40 @@ def load_config(path: str | Path, overrides: list[str] | None = None) -> dict:
     return cfg
 
 
+def layers_of(cfg: dict) -> list[dict]:
+    """Normaliza a lista de capas. Cada capa: pattern, params, opacity, palette, animation."""
+    if cfg.get("layers"):
+        return cfg["layers"]
+    return [{"pattern": cfg["geometry"]["pattern"], "params": cfg["geometry"].get("params") or {}}]
+
+
+def wants_hardware(out: dict) -> bool:
+    hw = out.get("hardware", "auto")
+    if hw == "auto":
+        return sys.platform == "darwin"
+    return bool(hw)
+
+
 def validate(cfg: dict) -> None:
     out = cfg["output"]
+    if out["codec"] in LEGACY_CODECS:
+        out["codec"] = LEGACY_CODECS[out["codec"]]
+        out["hardware"] = True
     for k in ("width", "height", "fps"):
         if not isinstance(out[k], int) or out[k] <= 0:
             raise ConfigError(f"output.{k} debe ser un entero > 0")
     if out["codec"] not in VALID_CODECS:
         raise ConfigError(f"output.codec debe ser uno de {sorted(VALID_CODECS)}")
     if out["codec"] != "prores" and (out["width"] % 2 or out["height"] % 2):
-        raise ConfigError("H.264 4:2:0 requiere ancho y alto pares")
+        raise ConfigError("H.264/HEVC 4:2:0 requiere ancho y alto pares")
+    if out.get("hardware", "auto") not in ("auto", True, False):
+        raise ConfigError('output.hardware debe ser "auto", true o false')
+    layers = layers_of(cfg)
+    for i, layer in enumerate(layers):
+        if "pattern" not in layer:
+            raise ConfigError(f"layers[{i}] necesita 'pattern'")
+        if float(layer.get("opacity", 1.0)) < 0:
+            raise ConfigError(f"layers[{i}].opacity debe ser >= 0")
     if int(out["supersample"]) < 1:
         raise ConfigError("output.supersample debe ser >= 1")
     if int(out["motion_blur"]["samples"]) < 1:

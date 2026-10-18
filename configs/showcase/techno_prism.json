@@ -1,0 +1,47 @@
+{
+  "output": {
+    "path": "renders/techno_prism.mp4",
+    "width": 3840, "height": 2160, "fps": 60,
+    "codec": "h264", "quality": "high", "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": { "samples": 4, "shutter": 0.5 }
+  },
+  "palette": { "preset": "dark_techno", "intensity": 1.4 },
+  "animation": {
+    "bpm": 128, "bars": 8,
+    "speed": 3.0, "rotation": -0.0667, "wobble": 0.0667, "hue_cycles": 0,
+    "pulse_strength": 0.9, "pulse_decay": 9.0
+  },
+  "layers": [
+    {
+      "pattern": "hex_tunnel",
+      "params": {
+        "sides": 3, "segment": 0.5, "line_width": 0.018, "twist": 0.18,
+        "grid": 5, "fog": 12, "panel_density": 0.06,
+        "streams": 1.0, "stream_speed": 3.0, "pulse_speed": 0.12
+      }
+    },
+    {
+      "pattern": "hex_tunnel",
+      "opacity": 0.65,
+      "params": {
+        "sides": 3, "radius": 0.45, "segment": 1.0, "line_width": 0.012, "twist": -0.25,
+        "grid": 1, "fog": 8, "panel_density": 0.0, "streams": 0.0
+      },
+      "palette": { "colors": ["#ffffff", "#ff1a1a"] },
+      "animation": { "rotation": 0.133, "beat_multiplier": 2, "pulse_decay": 12 }
+    },
+    {
+      "pattern": "starfield",
+      "opacity": 0.75,
+      "params": { "layers": 14, "density": 0.08, "size": 0.02, "streak": 6.0, "twinkle": 0.6 },
+      "palette": { "colors": ["#ffffff", "#ff3030"] },
+      "animation": { "speed": 1.2, "beat_multiplier": 4, "pulse_decay": 14 }
+    }
+  ],
+  "post": {
+    "exposure": 1.0, "bloom": 0.7, "bloom_radius": 1.0,
+    "vignette": 0.55, "grain": 0.02, "chromatic_aberration": 0.003,
+    "saturation": 1.15, "contrast": 1.15
+  }
+}
