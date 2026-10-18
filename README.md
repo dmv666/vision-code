@@ -48,8 +48,12 @@ Abrir. Para apagar el estudio, cierra su ventana de Terminal.
 - **Escenas** (izquierda) con miniaturas y buscador; **+ Nueva**, **Importar**
   (o arrastrar un `.json` a la ventana) y **🎲 Sorpréndeme**, que genera seis
   escenas nuevas a partir de las existentes con paletas armónicas al azar.
-- **Vista previa en vivo**, con **▶ Reproducir** (el loop completo a velocidad
-  real en un vídeo ligero), pantalla completa (F), **Calidad final**,
+- **Vista previa en vivo** a la resolución real de tu pantalla (nítida en
+  Retina): mientras mueves un control llega un borrador rápido y al soltarlo la
+  imagen definitiva. **▶ Reproducir** pre-renderiza el loop completo a velocidad
+  real en la calidad que elijas (Rápida 480p, HD 720p, Full HD 1080p o Final:
+  1080p con anti-aliasing y motion blur), con barra de progreso y sin bloquear
+  la edición; cada pre-render queda en caché. También: pantalla completa (F), **Calidad final**,
   **✦ Variaciones** (seis variantes de la escena, de sutil a radical) y
   **Comprobar loop**.
 - **Editor** por pestañas: Escena (patrón o capas: añadir, duplicar, reordenar),

@@ -60,9 +60,20 @@
             <button id="btn-full" class="ghost icon" title="Pantalla completa (F)">⛶</button>
           </div>
           <div id="clip-info" class="clip-info" hidden></div>
+          <div id="prerender" class="prerender" hidden>
+            <span id="prerender-label">Pre-renderizando…</span>
+            <div class="bar"><div id="prerender-bar"></div></div>
+            <button id="btn-prerender-cancel" class="small ghost">Cancelar</button>
+          </div>
         </div>
         <div class="scrub">
           <button id="btn-play" title="Reproduce el loop completo a velocidad real (espacio)">▶ Reproducir</button>
+          <select id="clip-quality" title="Calidad del pre-render del loop" aria-label="Calidad del pre-render">
+            <option value="rapida">Rápida · 480p</option>
+            <option value="hd">HD · 720p</option>
+            <option value="fullhd">Full HD · 1080p</option>
+            <option value="final">Final · 1080p + AA + blur</option>
+          </select>
           <input id="phase" type="range" min="0" max="1" step="0.001" value="0" aria-label="Posición en el loop">
           <span id="phase-label" class="mono">0.0 s</span>
         </div>

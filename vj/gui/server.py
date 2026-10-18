@@ -345,6 +345,13 @@ class Handler(BaseHTTPRequestHandler):
             if not job or not job.cfg:
                 raise HTTPError(404, "no se guardó la configuración de este vídeo")
             return self._json(job.cfg)
+        if path == "/api/clip-status":
+            return self._json(self._own_clip(user, q.get("id")).to_dict())
+        if path == "/api/clip-file":
+            job = self._own_clip(user, q.get("id"))
+            if job.state != "done" or not job.path.exists():
+                raise HTTPError(404, "el pre-render aún no está listo")
+            return self._media(job.path, False)
         if path == "/api/thumb":
             return self._thumb(user, q)
         if path.startswith("/media/"):
@@ -455,8 +462,12 @@ class Handler(BaseHTTPRequestHandler):
                                          who=who)
             return self._json({"frames": [_data_url(f) for f in frames]})
         if path == "/api/clip":
-            mp4 = app.engine.clip(body["config"], int(body.get("width", 480)), int(body.get("fps", 24)), who=who)
-            return self._send(200, mp4, "video/mp4")
+            job = app.engine.start_clip(body["config"], str(body.get("quality", "rapida")), ws.studio / "clips", who=who)
+            return self._json(job.to_dict())
+        if path == "/api/clip-cancel":
+            job = self._own_clip(user, body.get("id"))
+            job.cancelled = True
+            return self._json({"ok": True})
         if path == "/api/check":
             return self._json(app.engine.check(body["config"]))
         if path == "/api/variations":
@@ -520,6 +531,12 @@ class Handler(BaseHTTPRequestHandler):
             d["source"] = None
             d["log"] = [line.replace(root + os.sep, "").replace(root, "") for line in d["log"]]
         return d
+
+    def _own_clip(self, user: User, job_id):
+        job = self.app.engine.clip_job(int(job_id))
+        if not job or not (user.admin or job.who == user.name):
+            raise HTTPError(404, "pre-render no encontrado")
+        return job
 
     def _own_job(self, user: User, body: dict):
         job = self.app.queue.get(int(body["id"]))

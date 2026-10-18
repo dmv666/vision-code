@@ -11,7 +11,6 @@ import queue
 import struct
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import zlib
@@ -46,6 +45,25 @@ def encode_png(rgb: np.ndarray) -> bytes:
 INTERACTIVE, BACKGROUND = 0, 1   # prioridades: lo que el usuario está mirando va primero
 
 
+class _Cancelled(Exception):
+    pass
+
+
+class ClipJob:
+    def __init__(self, job_id: int, who: str, total: int, path: Path):
+        self.id = job_id
+        self.who = who
+        self.total = total
+        self.frame = 0
+        self.path = path
+        self.state = "running"          # running | done | error | cancelled
+        self.error: str | None = None
+        self.cancelled = False
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "state": self.state, "frame": self.frame, "total": self.total, "error": self.error}
+
+
 class PreviewEngine:
     """Un único hilo es dueño del contexto GL: todas las operaciones de GPU pasan por él.
 
@@ -58,6 +76,8 @@ class PreviewEngine:
         self._q: queue.PriorityQueue = queue.PriorityQueue()
         self._latest: dict[str, int] = {}
         self._seq = itertools.count()
+        self._clips: dict[int, ClipJob] = {}
+        self._clips_lock = threading.Lock()
         ready = threading.Event()
         self.gpu = "?"
         self.error: str | None = None
@@ -101,7 +121,7 @@ class PreviewEngine:
     @staticmethod
     def _size(cfg: dict, width: int) -> tuple[int, int]:
         out = cfg["output"]
-        width = max(64, min(int(width), 1600))
+        width = max(64, min(int(width), 1920))
         h = max(2, round(width * out["height"] / out["width"] / 2) * 2)
         return width, h
 
@@ -133,36 +153,90 @@ class PreviewEngine:
         return self.submit(lambda ctx: self._frames(ctx, user_cfg, [k / frames for k in range(frames)], width),
                            kind=f"flipbook:{who}").result()
 
-    def clip(self, user_cfg: dict, width: int = 480, fps: int = 24, who: str = "") -> bytes:
-        """El loop completo a velocidad real como MP4 ligero (se repite en el navegador sin salto)."""
-        def job(ctx):
-            cfg = self._fast(config_from_dict(user_cfg))
-            plan = plan_loop(cfg)
-            w, h = self._size(cfg, width)
-            n = max(2, min(round(plan.duration * fps), 720))
-            r = Renderer(cfg, plan, w, h, ctx=ctx)
-            with tempfile.TemporaryDirectory() as tmp:
-                out = Path(tmp) / "clip.mp4"
-                rate = n / plan.duration
-                proc = subprocess.Popen(
-                    ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-                     "-s", f"{w}x{h}", "-r", f"{rate:.6f}", "-i", "-", "-vf", "vflip", "-c:v", "libx264",
-                     "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                     "-an", str(out)], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-                try:
-                    for k in range(n):
-                        # Fase exacta k/n: n no tiene por qué dividir a plan.frames.
-                        proc.stdin.write(r.render(k * plan.frames / n))
-                    proc.stdin.close()
-                    err = proc.stderr.read().decode(errors="replace")
-                    if proc.wait() != 0:
-                        raise RuntimeError(f"ffmpeg: {err.strip()[-300:]}")
-                finally:
-                    if proc.poll() is None:
-                        proc.kill()
-                    r.release()
-                return out.read_bytes()
-        return self.submit(job, kind=f"clip:{who}").result()
+    # Calidades del pre-render: (ancho, fps máx., supersampling, motion blur, crf, preset x264).
+    CLIP_QUALITIES = {
+        "rapida": (480, 24, 1, 1, 26, "veryfast"),
+        "hd": (1280, 30, 1, 1, 21, "veryfast"),
+        "fullhd": (1920, 60, 1, 1, 18, "faster"),
+        "final": (1920, 60, 2, None, 16, "fast"),    # None = motion blur del config
+    }
+
+    def start_clip(self, user_cfg: dict, quality: str, out_dir: Path, who: str = "") -> "ClipJob":
+        """Pre-render del loop completo a velocidad real como MP4 (se repite sin salto).
+
+        Se hace por tandas de frames en la cola de baja prioridad: mientras dura,
+        la vista previa normal sigue respondiendo. Un pre-render nuevo de la
+        misma persona cancela el anterior."""
+        width, max_fps, ss, blur, crf, preset = self.CLIP_QUALITIES.get(quality, self.CLIP_QUALITIES["rapida"])
+        cfg = config_from_dict(user_cfg)
+        cfg["output"]["supersample"] = min(ss, int(cfg["output"]["supersample"])) if ss > 1 else 1
+        if blur is not None:
+            cfg["output"]["motion_blur"]["samples"] = blur
+        plan = plan_loop(cfg)
+        fps = min(max_fps, plan.fps)
+        w, h = self._size(cfg, width)
+        n = max(2, min(round(plan.duration * fps), 7200))
+        with self._clips_lock:
+            for old in self._clips.values():
+                if old.who == who and old.state == "running":
+                    old.cancelled = True
+            job = ClipJob(next(self._seq), who, n, out_dir / f"clip_{who or 'local'}_{time.time_ns()}.mp4")
+            self._clips[job.id] = job
+            for stale in [j for j in self._clips.values() if j.state != "running"][:-4]:
+                stale.path.unlink(missing_ok=True)       # solo se guardan los últimos pre-renders
+                del self._clips[stale.id]
+        out_dir.mkdir(parents=True, exist_ok=True)
+        state = {}
+
+        def step(ctx):
+            try:
+                if job.cancelled:
+                    raise _Cancelled()
+                if "r" not in state:
+                    state["r"] = Renderer(cfg, plan, w, h, ctx=ctx)
+                    state["p"] = subprocess.Popen(
+                        ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+                         "-s", f"{w}x{h}", "-r", f"{n / plan.duration:.6f}", "-i", "-", "-vf", "vflip",
+                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+                         "-movflags", "+faststart", "-an", str(job.path)],
+                        stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+                r, proc = state["r"], state["p"]
+                t0 = time.perf_counter()
+                # Tandas de ~0.15 s: lo justo para que una vista previa no espere.
+                while job.frame < n and time.perf_counter() - t0 < 0.15:
+                    proc.stdin.write(r.render(job.frame * plan.frames / n))   # fase exacta k/n
+                    job.frame += 1
+                if job.frame < n:
+                    self.submit(step, prio=BACKGROUND)
+                    return
+                proc.stdin.close()
+                err = proc.stderr.read().decode(errors="replace")
+                if proc.wait() != 0:
+                    raise RuntimeError(f"ffmpeg: {err.strip()[-300:]}")
+                job.state = "done"
+                self._end_clip(state)
+            except _Cancelled:
+                job.state = "cancelled"
+                self._end_clip(state, kill=True)
+                job.path.unlink(missing_ok=True)
+            except Exception as e:
+                job.state, job.error = "error", f"{type(e).__name__}: {e}"
+                self._end_clip(state, kill=True)
+                job.path.unlink(missing_ok=True)
+
+        self.submit(step, prio=BACKGROUND)
+        return job
+
+    @staticmethod
+    def _end_clip(state: dict, kill: bool = False) -> None:
+        if "p" in state and state["p"].poll() is None and kill:
+            state["p"].kill()
+        if "r" in state:
+            state["r"].release()
+        state.clear()
+
+    def clip_job(self, job_id: int) -> "ClipJob | None":
+        return self._clips.get(job_id)
 
     def thumbnails(self, cfgs: list[dict], width: int = 320, phase: float = 0.3, who: str = "") -> list[bytes]:
         """Una imagen por config (variaciones). Un fallo en una no tumba las demás."""

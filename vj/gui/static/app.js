@@ -297,23 +297,41 @@ function changed({ rerender = false, record = true } = {}) {
   stopClip();
   if (rerender) renderPanel();
   if (record) { clearTimeout(histTimer); histTimer = setTimeout(commitHistory, 350); renderHistoryButtons(); }
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(updatePreview, 220);
+  schedulePreview();
   clearTimeout(planTimer);
   planTimer = setTimeout(updatePlan, 220);
   updateOutPath();
 }
 
-const previewWidth = () => document.fullscreenElement ? Math.min(1600, screen.width) : state.hq ? 960 : 640;
+// Ancho en píxeles reales de la pantalla (Retina = ×2), hasta 1920.
+function previewWidth(draft = false) {
+  const css = document.fullscreenElement ? screen.width : $("#stage").clientWidth || 640;
+  const full = Math.min(1920, Math.round(css * (window.devicePixelRatio || 1)));
+  return Math.max(320, draft ? Math.round(full / 2.5) : full);
+}
 
-async function updatePreview() {
+// Mientras mueves un control llega primero un borrador rápido y, al soltar, la imagen nítida.
+let draftTimer = null, draftBusy = false;
+function schedulePreview(delay = 120) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => updatePreview(false), delay + 380);
+  if (draftTimer) return;                       // borradores como mucho cada `delay` ms
+  draftTimer = setTimeout(async () => {
+    draftTimer = null;
+    if (draftBusy) return;
+    draftBusy = true;
+    try { await updatePreview(true); } finally { draftBusy = false; }
+  }, delay);
+}
+
+async function updatePreview(draft = false) {
   if (!state.cfg) return;
   previewAbort?.abort();
   previewAbort = new AbortController();
   $("#spinner").hidden = false;
   try {
-    const blob = await api("/api/preview", { config: state.cfg, phase: state.phase, width: previewWidth(), hq: state.hq },
-                           { signal: previewAbort.signal });
+    const blob = await api("/api/preview", { config: state.cfg, phase: state.phase, width: previewWidth(draft),
+                                             hq: state.hq && !draft }, { signal: previewAbort.signal });
     const url = URL.createObjectURL(blob);
     $("#preview").src = url;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -358,34 +376,77 @@ function updatePhaseLabel() {
   $("#phase-label").textContent = (state.phase * d).toFixed(1) + " s";
 }
 
-// ------------------------------------------------------------------ reproducir el loop (vídeo ligero)
+// ------------------------------------------------------------------ reproducir el loop (pre-render en vídeo)
+const QUALITY_LABEL = { rapida: "rápida 480p", hd: "HD 720p", fullhd: "Full HD 1080p", final: "final 1080p + AA + blur" };
+const clipCache = new Map();     // config + calidad → id del pre-render ya hecho
+let clipJob = null, clipPoll = null;
+
+const clipKey = () => JSON.stringify(state.cfg) + "|" + $("#clip-quality").value;
+
 async function togglePlay() {
   if (state.playing) return stopClip();
-  const btn = $("#btn-play"), video = $("#clip");
-  const key = JSON.stringify(state.cfg);
-  btn.disabled = true;
-  btn.textContent = "… preparando";
-  $("#spinner").hidden = false;
+  if (clipJob) return cancelPrerender();
+  const key = clipKey(), quality = $("#clip-quality").value;
+  if (clipCache.has(key)) return playClip(clipCache.get(key), quality);
   try {
-    if (state.clip?.key !== key) {
-      const blob = await api("/api/clip", { config: state.cfg, width: 480, fps: 24 });
-      if (state.clip) URL.revokeObjectURL(state.clip.url);
-      state.clip = { key, url: URL.createObjectURL(blob) };
-    }
-    if (JSON.stringify(state.cfg) !== key) return;          // cambió mientras se preparaba
-    video.src = state.clip.url;
-    video.hidden = false;
-    await video.play();
-    state.playing = true;
-    $("#clip-info").hidden = false;
-    $("#clip-info").textContent = "vista previa a velocidad real · el render final es más nítido";
-  } catch (e) {
-    toast("No se pudo reproducir: " + e.message, "bad");
-  } finally {
-    btn.disabled = false;
-    $("#spinner").hidden = true;
-    btn.textContent = state.playing ? "■ Detener" : "▶ Reproducir";
+    clipJob = { ...(await api("/api/clip", { config: state.cfg, quality })), key, quality, t0: Date.now() };
+  } catch (e) { return toast("No se pudo pre-renderizar: " + e.message, "bad"); }
+  $("#btn-play").textContent = "■ Cancelar";
+  $("#prerender").hidden = false;
+  pollPrerender();
+}
+
+async function pollPrerender() {
+  clearTimeout(clipPoll);
+  const job = clipJob;
+  if (!job) return;
+  let st;
+  try { st = await api("/api/clip-status?id=" + job.id); } catch (e) { st = { state: "error", error: e.message }; }
+  if (job !== clipJob) return;
+  if (st.state === "running") {
+    const pct = st.total ? st.frame / st.total : 0;
+    const el_ = (Date.now() - job.t0) / 1000;
+    const eta = pct > 0.03 ? el_ * (1 - pct) / pct : null;
+    $("#prerender-bar").style.width = (pct * 100).toFixed(1) + "%";
+    $("#prerender-label").textContent = `Pre-render ${QUALITY_LABEL[job.quality]} · ${Math.round(pct * 100)}%` +
+      (eta != null ? ` · quedan ${fmtTime(eta)}` : "");
+    clipPoll = setTimeout(pollPrerender, 350);
+    return;
   }
+  endPrerender();
+  if (st.state === "done") {
+    clipCache.set(job.key, job.id);
+    if (clipCache.size > 4) clipCache.delete(clipCache.keys().next().value);   // el servidor guarda 4
+    if (clipKey() === job.key) playClip(job.id, job.quality);
+  } else if (st.state === "error") toast("Falló el pre-render: " + st.error, "bad");
+}
+
+function endPrerender() {
+  clearTimeout(clipPoll);
+  clipJob = null;
+  $("#prerender").hidden = true;
+  $("#btn-play").textContent = state.playing ? "■ Detener" : "▶ Reproducir";
+}
+
+function cancelPrerender() {
+  if (!clipJob) return;
+  api("/api/clip-cancel", { id: clipJob.id }).catch(() => {});
+  endPrerender();
+}
+
+async function playClip(id, quality) {
+  const video = $("#clip");
+  video.src = "/api/clip-file?id=" + id;
+  video.hidden = false;
+  try { await video.play(); } catch (e) {
+    video.hidden = true;
+    clipCache.forEach((v, k) => { if (v === id) clipCache.delete(k); });
+    return toast("No se pudo reproducir: " + e.message, "bad");
+  }
+  state.playing = true;
+  $("#btn-play").textContent = "■ Detener";
+  $("#clip-info").hidden = false;
+  $("#clip-info").textContent = `pre-render ${QUALITY_LABEL[quality]} · a velocidad real`;
 }
 
 function stopClip() {
@@ -394,7 +455,8 @@ function stopClip() {
   video.hidden = true;
   $("#clip-info").hidden = true;
   state.playing = false;
-  $("#btn-play").textContent = "▶ Reproducir";
+  if (clipJob && clipKey() !== clipJob.key) cancelPrerender();   // la escena cambió: ya no sirve
+  $("#btn-play").textContent = clipJob ? "■ Cancelar" : "▶ Reproducir";
 }
 
 function toggleFullscreen() {
@@ -1144,8 +1206,7 @@ function onKey(e) {
 function onPhase() {
   updatePhaseLabel();
   stopClip();
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(updatePreview, 60);
+  schedulePreview(40);
 }
 
 // ------------------------------------------------------------------ compartir
@@ -1213,9 +1274,13 @@ function bindUi() {
   $("#queue-pill").addEventListener("click", () => { setView("editor"); $("#jobs").scrollIntoView({ behavior: "smooth" }); });
   $("#phase").addEventListener("input", (e) => { state.phase = Number(e.target.value); onPhase(); });
   $("#hq").addEventListener("change", (e) => { state.hq = e.target.checked; updatePreview(); });
+  $("#clip-quality").value = store.get("vj.clipq") || "hd";
+  $("#clip-quality").addEventListener("change", (e) => { store.set("vj.clipq", e.target.value); stopClip(); });
+  $("#btn-prerender-cancel").addEventListener("click", cancelPrerender);
+  window.addEventListener("resize", () => schedulePreview(300));
   $("#btn-play").addEventListener("click", togglePlay);
   $("#btn-full").addEventListener("click", toggleFullscreen);
-  document.addEventListener("fullscreenchange", updatePreview);
+  document.addEventListener("fullscreenchange", () => updatePreview());
   $("#btn-check").addEventListener("click", checkLoop);
   $("#btn-vary").addEventListener("click", () => openVary("vary"));
   $("#btn-surprise").addEventListener("click", () => openVary("surprise"));
