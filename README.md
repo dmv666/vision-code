@@ -64,7 +64,8 @@ config.json ──► config.py ──► loop.py ──────────
 | `vj/patterns.py` | Registro de patrones: shader + parámetros por defecto |
 | `vj/renderer.py` | Contexto GL offscreen, capas aditivas, supersampling, motion blur, mipmaps para bloom |
 | `vj/encoder.py` | Candidatos por codec, prueba de hardware, escritor en hilo, PNG para stills |
-| `vj/shaders/common.glsl` | Uniforms compartidos, `palette()`, `pulse()`, `line_aa()` |
+| `vj/shaders/core.glsl` | Uniforms y utilidades válidas en vertex y fragment: `palette()`, `pulse()`, `rot()` |
+| `vj/shaders/common.glsl` | `core.glsl` + utilidades solo de fragment: `line_aa()`, `centered_uv()`, `emit()` |
 | `vj/shaders/<patrón>.frag` | Un archivo por geometría |
 | `vj/shaders/post.frag` | Downsample SSAA, bloom, aberración cromática, ACES, saturación/contraste, viñeta, gamma, grano |
 
@@ -78,14 +79,19 @@ final, aplica tonemap y entrega RGB24 a ffmpeg.
 | Patrón | Qué es | Parámetros clave |
 |---|---|---|
 | `hex_tunnel` | Túnel poligonal analítico con anillos, rejilla, paneles y flujos de datos | `sides`, `twist`, `grid`, `streams`, `stream_speed`, `panel_density` |
-| `particle_sphere` | Esferas de partículas (Fibonacci) que respiran con el BPM | `count`, `shells`, `size`, `displacement` (coste ∝ count×shells) |
+| `particle_sphere` | Esferas de partículas (Fibonacci) que respiran con el BPM; dibujadas como quads instanciados | `count`, `shells`, `size`, `displacement` |
 | `kaleidoscope` | Espejos + pliegues KIFS con zoom infinito log-polar | `segments`, `zoom`, `complexity`, `line_width` (0.002–0.01) |
 | `starfield` | Hiperespacio: capas de estrellas con estelas warp | `layers`, `density`, `streak`, `twinkle` |
 | `organic_waves` | Curvas de nivel de neón sobre ruido con distorsión de dominio | `bands`, `warp`, `scale`, `horizon` (>0 = suelo synthwave) |
 
 **Añadir un patrón**: crea `vj/shaders/<nombre>.frag` con `#include "common.glsl"`,
 usa `u_phase` y los contadores enteros, y regístralo en `PATTERNS` con sus
-parámetros. Cada clave de `params` llega como uniform `u_<clave>`.
+parámetros. Cada clave de `params` llega como uniform `u_<clave>`. Para
+elementos discretos (partículas, sprites) usa `"instanced"` como
+`particle_sphere`: un vertex shader que posiciona cada instancia es mucho más
+rápido que recorrer todos los elementos en cada píxel. No nombres funciones
+como las internas de GLSL (`noise1`–`noise4`...): el compilador de macOS lo
+rechaza; `glslangValidator` detecta estos casos.
 
 ### Configs incluidas
 
@@ -240,9 +246,12 @@ da ~49 y el comando falla con código 1 — útil en CI o en un batch de renders
 
 - **Tiempo de render 4K60** con SSAA 2× y motion blur 4: cada capa se evalúa
   4 × 33 M píxeles por frame. Túnel, caleidoscopio y ondas son baratos;
-  `starfield` cuesta ∝ `layers`; `particle_sphere` es O(partículas) por píxel
-  (bájalo con `count`/`shells`, `supersample: 1` o menos `motion_blur.samples`
-  si va lento). La terminal muestra fps y ETA; usa `--preview` para iterar.
+  `starfield` cuesta ∝ `layers`. `particle_sphere` dibuja cada partícula como
+  un quad instanciado (solo se sombrean los píxeles de su halo), así que miles
+  de partículas son baratas. Lo que más pesa es `supersample` (2 = 4× píxeles)
+  y `motion_blur.samples` (× pasadas): para un render rápido usa
+  `--set output.supersample=1`. La terminal muestra fps y ETA (sin contar el
+  primer frame, que incluye compilar shaders); usa `--preview` para iterar.
 - **Codec.** H.264 `yuv420p` es universal pero en degradados oscuros puede
   haber banding: el `grain` hace de dithering. HEVC 10 bits lo reduce mucho. ProRes HQ (10 bits 4:2:2) es la
   opción de máster; ProRes 4444 si necesitas más calidad de color. Para Resolume

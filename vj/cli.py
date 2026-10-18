@@ -125,13 +125,19 @@ def main(argv=None) -> int:
         with FFmpegWriter(path, renderer.width, renderer.height, plan.fps, encoder) as w:
             # Frames 0..N-1. NUNCA el frame N: es idéntico al 0 y duplicarlo
             # produce un "tartamudeo" de un frame en cada vuelta del loop.
+            t_warm = None
             for i in range(plan.frames):
                 w.write(renderer.render(i))
+                if i == 0:
+                    # El primer frame incluye compilar shaders y arrancar el encoder:
+                    # no cuenta para la velocidad ni el ETA.
+                    t_warm = time.perf_counter()
+                    print(f"[vj] primer frame listo en {t_warm - t0:.1f}s (incluye compilar shaders)")
+                    continue
                 if i % max(1, plan.fps // 2) == 0 or i == plan.frames - 1:
-                    el = time.perf_counter() - t0
-                    rate = (i + 1) / el
+                    rate = i / (time.perf_counter() - t_warm)
                     eta = (plan.frames - i - 1) / rate
-                    print(f"\r[vj] frame {i + 1}/{plan.frames}  {rate:.2f} fps  ETA {eta:6.1f}s",
+                    print(f"\r[vj] frame {i + 1}/{plan.frames}  {rate:.2f} fps  ETA {eta / 60:5.1f} min ",
                           end="", flush=True)
         print(f"\n[vj] listo → {path}  ({time.perf_counter() - t0:.1f}s)")
         return 0

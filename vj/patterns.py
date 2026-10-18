@@ -26,8 +26,11 @@ PATTERNS: dict[str, dict] = {
     },
     "particle_sphere": {
         "shader": "particle_sphere.frag",
+        # Partículas como quads instanciados: count × shells instancias.
+        "instanced": {"vertex": "particle_sphere.vert", "fragment": "particle_points.frag",
+                      "instances": ("count", "shells")},
         "params": {
-            "count": 280,          # partículas por capa (coste ∝ count × shells)
+            "count": 280,          # partículas por capa (las instanciadas son baratas; miles van bien)
             "shells": 2,
             "radius": 1.0,
             "size": 0.010,
@@ -70,11 +73,11 @@ PATTERNS: dict[str, dict] = {
 }
 
 
-def resolve_pattern(gcfg: dict) -> tuple[str, dict]:
+def resolve_pattern(gcfg: dict) -> tuple[dict, dict]:
     """Acepta un bloque `geometry` o una capa de `layers` (ambos con pattern/params)."""
     name = gcfg["pattern"]
     if name not in PATTERNS:
         raise ValueError(f"Patrón desconocido {name!r}. Opciones: {sorted(PATTERNS)}")
     spec = PATTERNS[name]
     params = {**spec["params"], **(gcfg.get("params") or {})}
-    return spec["shader"], params
+    return spec, params

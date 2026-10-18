@@ -1,6 +1,7 @@
 """Renderizado offscreen con moderngl (GPU, sin ventana)."""
 from __future__ import annotations
 
+import re
 import struct
 import sys
 from pathlib import Path
@@ -24,10 +25,13 @@ void main() {
 """
 
 
+INCLUDE_RE = re.compile(r'^#include "([^"]+)"\s*$', re.M)
+
+
 def load_shader(name: str) -> str:
+    """Lee un shader resolviendo #include "archivo" de forma recursiva."""
     src = (SHADER_DIR / name).read_text(encoding="utf-8")
-    common = (SHADER_DIR / "common.glsl").read_text(encoding="utf-8")
-    return src.replace('#include "common.glsl"', common)
+    return INCLUDE_RE.sub(lambda m: load_shader(m.group(1)), src)
 
 
 def create_context() -> moderngl.Context:
@@ -55,11 +59,26 @@ class Layer:
     def __init__(self, ctx: moderngl.Context, index: int, spec: dict, cfg: dict, plan: LoopPlan,
                  size: tuple[int, int], blur_samples: int):
         self.name = f"layers[{index}]:{spec['pattern']}"
-        shader_file, params = resolve_pattern(spec)
-        self.prog = ctx.program(vertex_shader=VERTEX_SHADER, fragment_shader=load_shader(shader_file))
+        pattern, params = resolve_pattern(spec)
+        self.prog = ctx.program(vertex_shader=VERTEX_SHADER, fragment_shader=load_shader(pattern["shader"]))
         self.vao = ctx.vertex_array(self.prog, [])
+        self.programs = [self.prog]
 
-        unknown = [k for k in params if f"u_{k}" not in self.prog]
+        # Geometría instanciada opcional (partículas como quads), dibujada tras la pasada completa.
+        self.inst_vao = None
+        inst = pattern.get("instanced")
+        if inst:
+            self.inst_prog = ctx.program(vertex_shader=load_shader(inst["vertex"]),
+                                         fragment_shader=load_shader(inst["fragment"]))
+            self.inst_vao = ctx.vertex_array(self.inst_prog, [])
+            self.instances = 1
+            for key in inst["instances"]:
+                self.instances *= max(0, int(params[key]))
+            self.programs.append(self.inst_prog)
+
+        consumed = set(inst["instances"]) if inst else set()
+        unknown = [k for k in params
+                   if k not in consumed and not any(f"u_{k}" in prog for prog in self.programs)]
         if unknown:
             print(f"[vj] aviso: {self.name}: parámetros sin efecto: {unknown}", file=sys.stderr)
 
@@ -72,7 +91,7 @@ class Layer:
         palette = resolve_palette({**cfg["palette"], **spec["palette"]} if spec.get("palette") else cfg["palette"])
         if index > 0:
             palette["u_background"] = (0.0, 0.0, 0.0)  # el fondo lo pone solo la primera capa
-        set_uniforms(self.prog, {
+        values = {
             "u_resolution": (float(size[0]), float(size[1])),
             # Opacidad perceptual: la mezcla es aditiva en luz lineal y la gamma
             # haría que 0.1 se viera como ~35 %. Elevar a 2.2 la hace actuar como un fader.
@@ -80,11 +99,17 @@ class Layer:
             **counters,
             **palette,
             **{f"u_{k}": float(v) for k, v in params.items()},
-        })
+        }
+        for prog in self.programs:
+            set_uniforms(prog, values)
 
     def draw(self, phase: float) -> None:
-        self.prog["u_phase"].value = phase
+        for prog in self.programs:
+            if "u_phase" in prog:
+                prog["u_phase"].value = phase
         self.vao.render(moderngl.TRIANGLES, vertices=3)
+        if self.inst_vao is not None and self.instances:
+            self.inst_vao.render(moderngl.TRIANGLES, vertices=6, instances=self.instances)
 
 
 class Renderer:
