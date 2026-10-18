@@ -1,0 +1,56 @@
+{
+  "output": {
+    "path": "renders/lava_lounge.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "duration": 36,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "geometry": {
+    "pattern": "lava_lounge",
+    "params": {
+      "blobs": 9,
+      "size": 0.085,
+      "gloss": 0.6,
+      "glow": 1.0
+    }
+  },
+  "palette": {
+    "colors": [
+      "#ff6a00",
+      "#ff3d2e",
+      "#ffb000",
+      "#c2185b",
+      "#6a1b9a"
+    ],
+    "background": "#14040f",
+    "intensity": 1.0
+  },
+  "animation": {
+    "bpm": 0,
+    "speed": 0.0334,
+    "rotation": 0,
+    "wobble": 0.0334,
+    "hue_cycles": 0,
+    "pulse_strength": 0,
+    "pulse_decay": 4.0
+  },
+  "post": {
+    "exposure": 1.0,
+    "vignette": 0.4,
+    "grain": 0.025,
+    "chromatic_aberration": 0.0008,
+    "bloom": 0.35,
+    "bloom_radius": 1.2,
+    "saturation": 1.0,
+    "contrast": 1.0
+  }
+}

@@ -97,6 +97,7 @@ final, aplica tonemap y entrega RGB24 a ffmpeg.
 | `kaleidoscope` | Espejos + pliegues KIFS con zoom infinito log-polar | `segments`, `zoom`, `complexity`, `line_width` (0.002–0.01) |
 | `starfield` | Hiperespacio: capas de estrellas con estelas warp | `layers`, `density`, `streak`, `twinkle` |
 | `organic_waves` | Curvas de nivel de neón sobre ruido con distorsión de dominio | `bands`, `warp`, `scale`, `horizon` (>0 = suelo synthwave) |
+| `aurora_lake` · `deep_sea` · `lava_lounge` · `rainy_city` · `zen_pond` · `desert_dusk` · `firefly_forest` | Escenas chill (ver tabla de configs) | ver `vj/patterns.py` |
 
 **Añadir un patrón**: crea `vj/shaders/<nombre>.frag` con `#include "common.glsl"`,
 usa `u_phase` y los contadores enteros, y regístralo en `PATTERNS` con sus
@@ -110,6 +111,19 @@ rechaza; `glslangValidator` detecta estos casos.
 ### Configs incluidas
 
 - `configs/*.json`: un patrón cada una (punto de partida).
+- `configs/chill/*.json`: escenas tranquilas (sin golpe, movimiento lento, loops de 30–40 s).
+  Cada una tiene su propio shader y elementos que no aparecen en ninguna otra:
+
+| Config | Escena | Elementos |
+|---|---|---|
+| `aurora_lake` | Lago ártico | Cortinas de aurora boreal, montañas, estrellas, reflejo ondulado en el agua |
+| `deep_sea` | Fondo marino | Rayos de luz desde la superficie, cáusticas en la arena, burbujas, nieve marina |
+| `lava_lounge` | Lámpara de lava | Bolas de cera que se fusionan (metaballs) con brillo e iluminación 3D |
+| `rainy_city` | Ciudad bajo la lluvia | Luces desenfocadas (bokeh) a la deriva, gotas que resbalan por el cristal |
+| `zen_pond` | Estanque zen | Ondas de gotas sombreadas con normales, hojas de loto, una flor, reflejo de luna |
+| `desert_dusk` | Atardecer en el desierto | Dunas en paralaje con sombreado por pendiente, sol, nubes finas, pájaros |
+| `firefly_forest` | Bosque de luciérnagas | Troncos en capas, niebla a la deriva, luciérnagas que vagan y parpadean, hierba |
+
 - `configs/showcase/*.json`: composiciones de 3 capas listas para festival:
 
 | Config | Capas | Estilo |
@@ -245,6 +259,16 @@ combinaciones donde `compases · 4 · 60 · fps / BPM` sea entero (128 BPM: 8 co
 - **Motion blur.** Los sub-frames usan `p ± δ` envuelto con `mod 1`: el blur del
   último frame "ve" el inicio del loop, igual que cualquier otro frame.
 - **Grano.** La semilla es `frame mod N`: el frame N tendría el mismo grano que el 0.
+- **Rejillas que se desplazan.** Mover una rejilla de celdas aleatorias un número
+  entero de celdas *no* basta: se verían celdas distintas (su contenido sale del
+  índice). La rejilla debe repetirse (`hash(índice mod P)`) y avanzar `K·P` celdas
+  por loop. `vj/shaders/noise.glsl` da ruido así (`tnoise`, `tfbm`).
+- **Hash entero.** Para esas celdas se usa `cell_hash` (aritmética `uint`), no
+  `hash12`: el hash en float encadena `fract` de productos y, cerca de 0/1, el
+  compilador puede redondear distinto en cada llamada (0.001 frente a 0.998). Con
+  `hash12` la aurora no cerraba el loop en ~12 000 valores de píxel.
+- **`mod` de enteros.** Usa `imod(x, P)` en vez de `mod`: en múltiplos exactos de
+  P, el recíproco aproximado de la GPU puede dar `128 mod 64 = 64`.
 - **Simulaciones/física** (partículas con estado): no son periódicas por
   naturaleza; hay que usar crossfade entre `F(p)` y `F(p+1)` en la última parte
   o, mejor, formularlas como funciones cerradas de `p` (como aquí).
@@ -252,9 +276,11 @@ combinaciones donde `compases · 4 · 60 · fps / BPM` sea entero (128 BPM: 8 co
 ### 3.5 Verificación automática
 
 `--check-loop` renderiza el frame 0 y el frame N con fase **sin envolver** (`p = 1.0`)
-y mide la diferencia media por píxel. Un loop correcto da ~0.0007 (error de
-coma flotante); si se introduce un término no periódico (p. ej. `0.37` vueltas)
-da ~49 y el comando falla con código 1 — útil en CI o en un batch de renders.
+y los compara valor a valor. Falla (código 1) si cualquier valor difiere en más
+de 2/255: el criterio es por píxel, no por media, porque un salto local (una
+costura en el ruido) puede tener una media casi nula y verse claramente. Un loop
+correcto da máx 1 (redondeo); un término no periódico (p. ej. `0.37` vueltas)
+da miles de valores fuera — útil en CI o en un batch de renders.
 
 ## 4. Notas de producción
 

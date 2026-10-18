@@ -70,6 +70,68 @@ PATTERNS: dict[str, dict] = {
             "horizon": 0.0,        # >0 (p.ej. 0.15) = suelo en perspectiva tipo synthwave
         },
     },
+    # ---- Escenas tranquilas (chill): cada una con sus propios elementos ----
+    "aurora_lake": {
+        "shader": "aurora_lake.frag",
+        "params": {
+            "horizon": -0.17,      # altura del agua
+            "curtain_height": 0.22,
+            "intensity": 1.0,
+            "star_density": 0.10,
+            "ripple": 0.03,        # ondulación del reflejo
+        },
+    },
+    "deep_sea": {
+        "shader": "deep_sea.frag",
+        "params": {
+            "floor": -0.28,
+            "rays": 1.0,
+            "bubbles": 28,
+            "caustic_scale": 5.0,
+            "snow": 1.0,
+        },
+    },
+    "lava_lounge": {
+        "shader": "lava_lounge.frag",
+        "params": {
+            "blobs": 9,
+            "size": 0.085,
+            "gloss": 0.6,
+            "glow": 1.0,
+        },
+    },
+    "rainy_city": {
+        "shader": "rainy_city.frag",
+        "params": {
+            "lights": 0.55,        # densidad de luces desenfocadas
+            "drops": 0.35,         # densidad de gotas en el cristal
+            "blur": 0.25,          # suavidad del borde del bokeh
+        },
+    },
+    "zen_pond": {
+        "shader": "zen_pond.frag",
+        "params": {
+            "drops": 7,            # gotas simultáneas
+            "ripple_size": 0.32,
+            "pads": 4,             # hojas de loto (0–5)
+        },
+    },
+    "desert_dusk": {
+        "shader": "desert_dusk.frag",
+        "params": {
+            "horizon": 0.0,
+            "sun_size": 0.075,
+            "birds": 3,
+        },
+    },
+    "firefly_forest": {
+        "shader": "firefly_forest.frag",
+        "params": {
+            "fireflies": 45,
+            "fog": 1.0,
+            "trees": 0.55,         # densidad de troncos
+        },
+    },
 }
 
 

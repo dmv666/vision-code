@@ -1,0 +1,56 @@
+{
+  "output": {
+    "path": "renders/zen_pond.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "duration": 30,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "geometry": {
+    "pattern": "zen_pond",
+    "params": {
+      "drops": 7,
+      "ripple_size": 0.32,
+      "pads": 4
+    }
+  },
+  "palette": {
+    "colors": [
+      "#e9ecff",
+      "#2f6b4f",
+      "#3d8a5c",
+      "#3b4fa8",
+      "#8ea2ff",
+      "#ff9ec7"
+    ],
+    "background": "#03040c",
+    "intensity": 1.0
+  },
+  "animation": {
+    "bpm": 0,
+    "speed": 0.0334,
+    "rotation": 0.0334,
+    "wobble": 0.0334,
+    "hue_cycles": 0,
+    "pulse_strength": 0,
+    "pulse_decay": 4.0
+  },
+  "post": {
+    "exposure": 1.0,
+    "vignette": 0.4,
+    "grain": 0.02,
+    "chromatic_aberration": 0.0008,
+    "bloom": 0.4,
+    "bloom_radius": 1.2,
+    "saturation": 1.0,
+    "contrast": 1.0
+  }
+}

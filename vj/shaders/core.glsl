@@ -61,3 +61,23 @@ float pulse(float offset) {
     if (u_beats < 0.5) return 0.0;
     return exp(-u_pulse_decay * fract(u_phase * u_beats - offset));
 }
+
+// mod() exacto para enteros: los compiladores de GPU calculan mod(x, P) como
+// x − P·floor(x·(1/P)) con un recíproco aproximado, y en múltiplos exactos de P
+// el floor puede caer una unidad por debajo (128 mod 64 → 64 en vez de 0). Eso
+// abría una costura en el ruido cada `period` celdas y rompía el loop.
+float imod(float x, float period) {
+    return x - period * floor((x + 0.5) / period);
+}
+
+// Hash entero de una celda: aritmética uint, idéntica bit a bit para la misma
+// celda. hash12 (encadena fract de productos en float) es mal condicionado: cerca
+// de 0/1 un redondeo distinto —el compilador puede reordenar operaciones en cada
+// llamada— lo hace saltar de 0.001 a 0.998, y el ruido dejaba de ser periódico.
+float cell_hash(vec2 c) {
+    uvec2 q = uvec2(ivec2(c) + ivec2(65536));
+    uint h = (q.x * 1597334673u) ^ (q.y * 3812015801u);
+    h = (h ^ (h >> 16u)) * 2246822519u;
+    h ^= h >> 13u;
+    return float(h >> 8u) * (1.0 / 16777216.0);
+}

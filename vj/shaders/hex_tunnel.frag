@@ -36,7 +36,7 @@ void main() {
 
     float local = mod(ang, sector) - 0.5 * sector;   // ángulo dentro de la cara
     float z = z0 / cos(local);                        // profundidad real hasta la cara plana
-    float face = mod(floor(ang / sector), u_sides);
+    float face = imod(floor(ang / sector), u_sides);
     float half_w = u_radius * tan(0.5 * sector);
     float s = tan(local) / tan(0.5 * sector);         // -1..1 a lo ancho de la cara
 
@@ -69,7 +69,7 @@ void main() {
     // Paneles iluminados aleatorios. El índice de anillo se toma mod u_travel:
     // tras un loop cada anillo ha avanzado exactamente u_travel posiciones, así
     // que el anillo que ocupa el lugar de otro hereda también su "semilla".
-    float seed = hash12(vec2(mod(ring_id, max(u_travel, 1.0)), face * 7.0 + cell));
+    float seed = hash12(vec2(imod(ring_id, max(u_travel, 1.0)), face * 7.0 + cell));
     float lit = step(1.0 - u_panel_density, seed);
     float flicker = 0.5 + 0.5 * sin(th * u_wobble * 4.0 + seed * TAU);
     float panel = lit * (0.03 + 0.12 * flicker) * (1.0 - far);

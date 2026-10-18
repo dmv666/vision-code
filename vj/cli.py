@@ -53,7 +53,10 @@ def check_loop(renderer: Renderer) -> int:
     f_n = renderer.render(n, wrap=False)  # fase 1.0 real, no envuelta a 0
     exact = frame_delta(f0, f_n)
     seam = frame_delta(f_last, f0)
-    print(f"  |frame N − frame 0|        = {exact:.4f}  (debe ser ~0)")
+    diff = np.abs(np.frombuffer(f0, np.uint8).astype(np.int16) - np.frombuffer(f_n, np.uint8).astype(np.int16))
+    bad = int((diff > 2).sum())
+    print(f"  |frame N − frame 0|        = {exact:.4f} media, máx {int(diff.max())}, "
+          f"{bad} valores > 2  (deben ser ~0 y 0)")
     print(f"  costura  frame N-1 → 0     = {seam:.4f}")
     print(f"  paso     frame 0 → 1       = {frame_delta(f0, f1):.4f}")
     if plan.beats > 1 and n % plan.beats == 0:
@@ -62,7 +65,9 @@ def check_loop(renderer: Renderer) -> int:
         m = (plan.beats // 2) * (n // plan.beats)
         ref = frame_delta(renderer.render(m - 1), renderer.render(m))
         print(f"  paso en otro golpe {m - 1}→{m} = {ref:.4f}  (la costura debería parecerse)")
-    ok = exact < 0.5
+    # Criterio por píxel, no por media: un salto local (una costura en el ruido,
+    # una zona de la imagen) puede ser muy visible con una media casi nula.
+    ok = bad == 0
     print("  ✓ loop perfecto" if ok else "  ✗ el loop tiene un salto: hay términos no periódicos en el shader")
     return 0 if ok else 1
 

@@ -1,0 +1,55 @@
+{
+  "output": {
+    "path": "renders/desert_dusk.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "duration": 40,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "geometry": {
+    "pattern": "desert_dusk",
+    "params": {
+      "horizon": 0.0,
+      "sun_size": 0.075,
+      "birds": 3
+    }
+  },
+  "palette": {
+    "colors": [
+      "#f2b36b",
+      "#e8925a",
+      "#c9607a",
+      "#ff9a6b",
+      "#5b3a8c"
+    ],
+    "background": "#0e0718",
+    "intensity": 1.1
+  },
+  "animation": {
+    "bpm": 0,
+    "speed": 0.0334,
+    "rotation": 0,
+    "wobble": 0.0334,
+    "hue_cycles": 0,
+    "pulse_strength": 0,
+    "pulse_decay": 4.0
+  },
+  "post": {
+    "exposure": 1.0,
+    "vignette": 0.35,
+    "grain": 0.02,
+    "chromatic_aberration": 0.0008,
+    "bloom": 0.45,
+    "bloom_radius": 1.2,
+    "saturation": 1.0,
+    "contrast": 1.0
+  }
+}
