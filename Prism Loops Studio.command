@@ -1,8 +1,4 @@
 #!/bin/bash
-# Doble clic en macOS: abre la interfaz de Prism Loops en el navegador.
-# (Se abre una ventana de Terminal: ciérrala para apagar la interfaz.)
-cd "$(dirname "$0")" || exit 1
-if [ -f .venv/bin/activate ]; then
-  source .venv/bin/activate
-fi
-exec python3 -m vj.gui
+# Doble clic (macOS) o ./"Prism Loops Studio.command" (Linux): abre Prism Loops Studio
+# en el navegador. La primera vez instala lo necesario. Cierra esta ventana para apagarlo.
+exec "$(dirname "$0")/scripts/launch.sh" "$@"

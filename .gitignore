@@ -3,3 +3,6 @@ __pycache__/
 renders/
 *.mp4
 *.mov
+.studio/
+.venv/
+studio-data/

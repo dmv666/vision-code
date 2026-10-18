@@ -1,0 +1,22 @@
+services:
+  studio:
+    build: .
+    ports:
+      - "8765:8765"
+    environment:
+      PRISM_CODE: "cambia-este-codigo"          # código para invitados
+      PRISM_ADMIN_CODE: "cambia-este-tambien"   # código que da permisos de administrador
+      PRISM_MAX_RES: "4k"                       # 1080p | 1440p | 4k | 2560x1440
+      PRISM_MAX_DURATION: "120"                 # segundos de loop por render (invitados)
+      PRISM_MAX_JOBS: "2"                       # renders en cola por invitado
+    volumes:
+      - ./studio-data:/data
+    restart: unless-stopped
+    # GPU NVIDIA (mucho más rápido): instala nvidia-container-toolkit y descomenta.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

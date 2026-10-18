@@ -45,7 +45,27 @@ SECTIONS = {
 
 RESOLUTIONS = [
     ("4K UHD", 3840, 2160), ("1440p", 2560, 1440), ("1080p", 1920, 1080), ("720p", 1280, 720),
-    ("Vertical 1080×1920", 1080, 1920), ("Cuadrado 2048", 2048, 2048),
+    ("Vertical 1080×1920", 1080, 1920), ("Cuadrado 1080", 1080, 1080), ("Cuadrado 2048", 2048, 2048),
+]
+
+# Destinos típicos: un clic ajusta resolución, fps, codec y calidad.
+EXPORT_PRESETS = [
+    ("YouTube 4K60", "HEVC 10 bits: sin banding en degradados",
+     {"width": 3840, "height": 2160, "fps": 60, "codec": "hevc", "quality": "high", "supersample": 2}),
+    ("YouTube 1080p60", "H.264, sube y procesa rápido",
+     {"width": 1920, "height": 1080, "fps": 60, "codec": "h264", "quality": "high", "supersample": 2}),
+    ("Reels / TikTok / Shorts", "Vertical 1080×1920 a 30 fps",
+     {"width": 1080, "height": 1920, "fps": 30, "codec": "h264", "quality": "high", "supersample": 2}),
+    ("Instagram cuadrado", "1080×1080 a 30 fps",
+     {"width": 1080, "height": 1080, "fps": 30, "codec": "h264", "quality": "high", "supersample": 2}),
+    ("VJ en vivo", "1080p60 ProRes: Resolume / VDMX lo reproducen sin esfuerzo",
+     {"width": 1920, "height": 1080, "fps": 60, "codec": "prores", "quality": "hq", "supersample": 2}),
+    ("Máster 4K", "ProRes HQ 4K con motion blur, para editar",
+     {"width": 3840, "height": 2160, "fps": 60, "codec": "prores", "quality": "hq", "supersample": 2,
+      "motion_blur": {"samples": 4, "shutter": 0.5}}),
+    ("Borrador rápido", "720p30 sin supersampling: para revisar el movimiento",
+     {"width": 1280, "height": 720, "fps": 30, "codec": "h264", "quality": "draft", "supersample": 1,
+      "motion_blur": {"samples": 1, "shutter": 0.5}}),
 ]
 QUALITIES = {"h264": ["draft", "high", "master"], "hevc": ["draft", "high", "master"],
              "prores": PRORES_PROFILES}
@@ -82,4 +102,5 @@ def meta(gpu: str) -> dict:
         "qualities": QUALITIES,
         "codecs": ["h264", "hevc", "prores"],
         "fps": [24, 25, 30, 50, 60],
+        "export_presets": [dict(zip(("label", "desc", "output"), e)) for e in EXPORT_PRESETS],
     }

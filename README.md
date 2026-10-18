@@ -29,30 +29,81 @@ python -m vj configs/showcase/liquid_temple.json \
 Si un patrón aparece dos veces (p. ej. dos `hex_tunnel` en `techno_prism`), usa
 el índice (`layers.0`, `layers.1`); el error te indica cuáles hay.
 
-## Interfaz (sin comandos)
+## Prism Loops Studio (interfaz, sin comandos)
+
+| Sistema | Abrir | Compartir con tu red |
+|---|---|---|
+| macOS | doble clic en `Prism Loops Studio.command` | `Prism Loops Studio (compartir).command` |
+| Windows | doble clic en `Prism Loops Studio.bat` | `Prism Loops Studio (compartir).bat` |
+| Linux | `./"Prism Loops Studio.command"` | `./"Prism Loops Studio (compartir).command"` |
+| Cualquiera | `python -m vj.gui` | `python -m vj.gui --share` |
+
+La primera vez el lanzador crea `.venv`, instala las dependencias y comprueba
+`ffmpeg` (en Mac lo instala con Homebrew si está disponible; en Windows indica
+`winget install Gyan.FFmpeg`). En macOS, si pide confirmación: clic derecho →
+Abrir. Para apagar el estudio, cierra su ventana de Terminal.
+
+**Qué incluye**
+
+- **Escenas** (izquierda) con miniaturas y buscador; **+ Nueva**, **Importar**
+  (o arrastrar un `.json` a la ventana) y **🎲 Sorpréndeme**, que genera seis
+  escenas nuevas a partir de las existentes con paletas armónicas al azar.
+- **Vista previa en vivo**, con **▶ Reproducir** (el loop completo a velocidad
+  real en un vídeo ligero), pantalla completa (F), **Calidad final**,
+  **✦ Variaciones** (seis variantes de la escena, de sutil a radical) y
+  **Comprobar loop**.
+- **Editor** por pestañas: Escena (patrón o capas: añadir, duplicar, reordenar),
+  Paleta, Animación, Salida, Post y JSON (descargar / copiar). Doble clic en un
+  deslizador lo devuelve al valor por defecto.
+- **Destinos de exportación** en un clic: YouTube 4K60 (HEVC), YouTube 1080p60,
+  Reels/TikTok/Shorts, Instagram cuadrado, VJ en vivo (ProRes 1080p), Máster 4K y
+  Borrador rápido.
+- **Cola de renders** en procesos aparte, con progreso, tiempo restante,
+  cancelar, aviso al terminar y historial que sobrevive a reinicios.
+- **Galería** de vídeos con reproductor, descarga, «Abrir su escena» (la
+  configuración exacta con que se hizo), borrar y **Versión larga**: repite el
+  loop 10 min – 3 h sin recodificar (segundos, sin pérdida) para YouTube.
+- **Deshacer / rehacer** (⌘Z / ⇧⌘Z), **⌘S** para guardar, espacio para
+  reproducir y ← → para recorrer el loop.
+- Funciona en el móvil o la tablet: el diseño se adapta a la pantalla.
+
+### Compartir
+
+Con `--share` (o el lanzador «compartir») el estudio escucha en tu red local y
+muestra en la Terminal la dirección (`http://192.168.x.x:8765`) y un **código
+de acceso**; también los ves con el botón **Compartir** de la interfaz. Cada
+persona entra desde su navegador con su nombre y ese código:
+
+- Sus escenas se guardan en `configs/users/<nombre>/` y sus vídeos en
+  `renders/<nombre>/`; nadie ve ni borra lo de otro. Las escenas incluidas son
+  de solo lectura para los invitados.
+- Tú, desde el propio equipo, entras sin código como administrador y ves todos
+  los trabajos.
+- Límites para invitados: `--max-res 1080p|1440p|4k|2560x1440`,
+  `--max-duration 120` (segundos de loop) y `--max-jobs 2` (renders en cola por
+  persona).
+- Otras opciones: `--code` (fija el código), `--admin-code` (da permisos de
+  administrador desde otros equipos), `--workspace <carpeta>` (dónde guardar
+  escenas y vídeos), `--cert/--key` (HTTPS) y `--require-login` (pide login
+  también en este equipo).
+
+Los renders se hacen en **tu** equipo: los invitados comparten tu GPU y la
+cola es una sola. Si no defines `--code`, se genera uno y se reutiliza en los
+siguientes arranques.
+
+**Desde Internet** (no solo tu Wi-Fi): lo más sencillo y seguro es
+[Tailscale](https://tailscale.com) (cada persona entra a tu dirección de
+Tailscale). Un túnel como `cloudflared tunnel --url http://localhost:8765`
+también funciona: el estudio detecta las cabeceras del proxy y pide código a
+todo el que llega por él. Para un servidor siempre encendido, usa Docker:
 
 ```bash
-python -m vj.gui          # abre http://127.0.0.1:8765 en el navegador
+# edita los códigos en docker-compose.yml y luego:
+docker compose up -d            # → http://<servidor>:8765
 ```
 
-En macOS basta con **doble clic en `Prism Loops Studio.command`** (activa el
-`.venv` si existe). La primera vez, si macOS pide confirmación: clic derecho →
-Abrir. Para apagarla, cierra la ventana de Terminal que se abre.
-
-- **Izquierda:** todas las configuraciones de `configs/` (buscador incluido).
-- **Centro:** vista previa en vivo: se actualiza al mover cualquier control.
-  El deslizador recorre el loop; **▶ Animar** lo reproduce en vista rápida;
-  **Calidad final** activa supersampling y motion blur; **Comprobar loop** hace
-  la verificación numérica. Debajo, el plan del loop y sus redondeos.
-- **Derecha:** pestañas Escena (patrón o capas, con sus parámetros), Paleta
-  (presets o colores propios), Animación, Salida (resolución, fps, duración,
-  codec), Post y JSON.
-- **Renderizar:** cola de renders con progreso, fps, tiempo restante, cancelar y
-  «Mostrar en Finder». Cada render corre en su propio proceso.
-- **Guardar / Guardar como… (⌘S):** escribe en `configs/` (p. ej. `configs/mine/`).
-
-La interfaz solo escucha en `127.0.0.1` (no es accesible desde la red) y no
-necesita dependencias extra.
+Sin GPU, Docker renderiza con Mesa por CPU (lento en 4K); con una NVIDIA,
+descomenta el bloque `deploy` del compose (requiere nvidia-container-toolkit).
 
 ## Instalación en macOS (Apple Silicon o Intel)
 
@@ -104,7 +155,8 @@ config.json ──► config.py ──► loop.py ──────────
 | `vj/renderer.py` | Contexto GL offscreen, capas aditivas, supersampling, motion blur, mipmaps para bloom |
 | `vj/encoder.py` | Candidatos por codec, prueba de hardware, escritor en hilo, PNG para stills |
 | `vj/check.py` | Verificación numérica del loop (CLI e interfaz) |
-| `vj/gui/` | Interfaz web local: servidor (`server.py`), GPU y cola de renders (`worker.py`), rangos de controles (`schema.py`), frontend (`static/`) |
+| `vj/gui/` | Prism Loops Studio: servidor HTTP y permisos (`server.py`), acceso y límites (`auth.py`), GPU y colas de trabajos (`worker.py`), escenas al azar y variaciones (`generator.py`), rangos y destinos (`schema.py`), frontend (`static/`) |
+| `scripts/`, `*.command`, `*.bat`, `Dockerfile` | Lanzadores que se instalan solos (macOS, Windows, Linux) y despliegue como servidor |
 | `vj/shaders/core.glsl` | Uniforms y utilidades válidas en vertex y fragment: `palette()`, `pulse()`, `rot()` |
 | `vj/shaders/common.glsl` | `core.glsl` + utilidades solo de fragment: `line_aa()`, `centered_uv()`, `emit()` |
 | `vj/shaders/<patrón>.frag` | Un archivo por geometría |

@@ -3,56 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a12">
 <title>Prism Loops Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g'%3E%3Cstop offset='0' stop-color='%237b2cff'/%3E%3Cstop offset='.45' stop-color='%2300e5ff'/%3E%3Cstop offset='.75' stop-color='%23ff2bd6'/%3E%3Cstop offset='1' stop-color='%23ffb000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M16 3 30 28H2z' fill='url(%23g)'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="prism"></span>Prism Loops <em>Studio</em></div>
+  <button id="btn-menu" class="ghost icon only-mobile" title="Escenas">☰</button>
+  <div class="brand"><span class="prism"></span><span>Prism Loops <em>Studio</em></span></div>
   <div class="file">
-    <span id="file-name">—</span><span id="dirty" class="dirty" hidden>●</span>
+    <span id="file-name">—</span><span id="dirty" class="dirty" hidden title="Cambios sin guardar">●</span>
   </div>
   <div class="actions">
-    <button id="btn-revert" class="ghost" title="Descartar cambios">Revertir</button>
-    <button id="btn-saveas" class="ghost">Guardar como…</button>
+    <button id="btn-undo" class="ghost icon" title="Deshacer (⌘Z)" disabled>↶</button>
+    <button id="btn-redo" class="ghost icon" title="Rehacer (⇧⌘Z)" disabled>↷</button>
+    <button id="btn-revert" class="ghost hide-narrow" title="Descartar cambios">Revertir</button>
+    <button id="btn-saveas" class="ghost hide-narrow">Guardar como…</button>
     <button id="btn-save">Guardar <kbd>⌘S</kbd></button>
+    <button id="btn-share" class="ghost hide-narrow" hidden title="Invitar a otras personas">Compartir</button>
+    <div id="user-chip" class="user-chip" hidden>
+      <span id="user-name"></span><button id="btn-logout" class="ghost small">Salir</button>
+    </div>
   </div>
 </header>
 
 <div class="layout">
-  <aside class="sidebar">
-    <input id="search" type="search" placeholder="Buscar configuración…">
+  <aside class="sidebar" id="sidebar">
+    <div class="side-actions">
+      <button id="btn-new" title="Escena nueva desde cero">+ Nueva</button>
+      <button id="btn-surprise" title="Genera escenas nuevas al azar">🎲 Sorpréndeme</button>
+      <button id="btn-import" class="ghost" title="Abrir un .json de tu equipo">Importar</button>
+      <input id="import-file" type="file" accept=".json,application/json" hidden>
+    </div>
+    <input id="search" type="search" placeholder="Buscar escena o patrón…">
     <nav id="config-list"></nav>
     <div class="gpu" id="gpu"></div>
   </aside>
 
   <main class="center">
-    <div id="banner" class="banner" hidden></div>
-    <section class="preview-card">
-      <div class="stage" id="stage">
-        <img id="preview" alt="Vista previa">
-        <img id="flip" alt="" hidden>
-        <div class="spinner" id="spinner" hidden></div>
-      </div>
-      <div class="scrub">
-        <button id="btn-play" class="ghost" title="Ver el loop animado (vista rápida)">▶ Animar</button>
-        <input id="phase" type="range" min="0" max="1" step="0.001" value="0">
-        <span id="phase-label" class="mono">0.0 s</span>
-        <label class="toggle" title="Supersampling y motion blur como en el render final (más lento)">
-          <input id="hq" type="checkbox"> Calidad final
-        </label>
-        <button id="btn-check" class="ghost" title="Verifica que el último frame enlaza con el primero">Comprobar loop</button>
-      </div>
-      <div class="plan" id="plan"></div>
-    </section>
+    <nav class="views">
+      <button data-view="editor" class="on">Editor</button>
+      <button data-view="gallery">Galería <span id="gallery-count" class="count"></span></button>
+      <span class="spacer"></span>
+      <span id="queue-pill" class="queue-pill" hidden></span>
+    </nav>
 
-    <section class="render-card">
-      <div class="render-row">
-        <input id="out-path" class="mono" type="text" spellcheck="false">
-        <button id="btn-render" class="primary">Renderizar</button>
+    <div id="view-editor" class="view">
+      <div id="banner" class="banner" hidden></div>
+      <section class="preview-card">
+        <div class="stage" id="stage">
+          <img id="preview" alt="Vista previa">
+          <video id="clip" muted loop playsinline hidden></video>
+          <div class="spinner" id="spinner" hidden></div>
+          <div class="stage-tools">
+            <button id="btn-full" class="ghost icon" title="Pantalla completa (F)">⛶</button>
+          </div>
+          <div id="clip-info" class="clip-info" hidden></div>
+        </div>
+        <div class="scrub">
+          <button id="btn-play" title="Reproduce el loop completo a velocidad real (espacio)">▶ Reproducir</button>
+          <input id="phase" type="range" min="0" max="1" step="0.001" value="0" aria-label="Posición en el loop">
+          <span id="phase-label" class="mono">0.0 s</span>
+        </div>
+        <div class="tools">
+          <label class="toggle" title="Supersampling y motion blur como en el render final (más lento)">
+            <input id="hq" type="checkbox"> Calidad final
+          </label>
+          <span class="spacer"></span>
+          <button id="btn-vary" class="ghost" title="Genera variaciones de esta escena y elige una">✦ Variaciones</button>
+          <button id="btn-check" class="ghost" title="Verifica que el último frame enlaza con el primero">Comprobar loop</button>
+        </div>
+        <div class="plan" id="plan"></div>
+      </section>
+
+      <section class="render-card">
+        <div class="render-row">
+          <input id="out-path" class="mono" type="text" spellcheck="false" aria-label="Archivo de salida">
+          <button id="btn-render" class="primary">Renderizar</button>
+        </div>
+        <div id="render-hint" class="hint tight"></div>
+        <div id="jobs"></div>
+      </section>
+    </div>
+
+    <div id="view-gallery" class="view" hidden>
+      <div class="gallery-head">
+        <input id="gallery-search" type="search" placeholder="Buscar vídeo…">
+        <button id="btn-gallery-refresh" class="ghost">Actualizar</button>
       </div>
-      <div id="jobs"></div>
-    </section>
+      <div id="gallery" class="gallery"></div>
+    </div>
   </main>
 
   <aside class="editor">
@@ -68,14 +109,79 @@
   </aside>
 </div>
 
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<!-- Acceso (modo compartido) -->
+<div id="login" class="login" hidden>
+  <form id="login-form" class="login-card">
+    <div class="brand big"><span class="prism"></span><span>Prism Loops <em>Studio</em></span></div>
+    <p class="hint">Crea loops visuales perfectos en 4K. Entra con tu nombre y el código que te dio quien comparte el estudio.</p>
+    <label>Tu nombre <input id="login-name" autocomplete="username" required maxlength="40" placeholder="p. ej. maria"></label>
+    <label>Código de acceso <input id="login-code" autocomplete="current-password" required placeholder="xxxx-xxxx-xxxx"></label>
+    <div id="login-error" class="login-error" hidden></div>
+    <button class="primary wide">Entrar</button>
+  </form>
+</div>
+
 <dialog id="dlg-saveas">
   <form method="dialog">
     <h3>Guardar como</h3>
-    <label>Carpeta <input id="saveas-folder" type="text" value="mine"></label>
+    <label id="saveas-folder-row">Carpeta <input id="saveas-folder" type="text" value="mine"></label>
     <label>Nombre <input id="saveas-name" type="text" required pattern="[A-Za-z0-9_\-]+"></label>
-    <p class="hint">Se guarda en <span class="mono">configs/&lt;carpeta&gt;/&lt;nombre&gt;.json</span></p>
-    <menu><button value="cancel" class="ghost">Cancelar</button><button value="ok" id="saveas-ok">Guardar</button></menu>
+    <p class="hint" id="saveas-hint">Se guarda en <span class="mono">configs/&lt;carpeta&gt;/&lt;nombre&gt;.json</span></p>
+    <menu><button value="cancel" class="ghost" formnovalidate>Cancelar</button><button value="ok" id="saveas-ok">Guardar</button></menu>
   </form>
+</dialog>
+
+<dialog id="dlg-share">
+  <div class="dlg-head">
+    <h3>Compartir el estudio</h3>
+    <button class="ghost icon" data-close title="Cerrar">✕</button>
+  </div>
+  <div id="share-body"></div>
+</dialog>
+
+<dialog id="dlg-vary" class="wide">
+  <div class="dlg-head">
+    <h3 id="vary-title">Variaciones</h3>
+    <button class="ghost icon" data-close title="Cerrar">✕</button>
+  </div>
+  <div class="vary-controls" id="vary-controls">
+    <span class="hint tight">Sutil</span>
+    <input id="vary-amount" type="range" min="0.05" max="1" step="0.05" value="0.35" aria-label="Intensidad de la variación">
+    <span class="hint tight">Radical</span>
+  </div>
+  <div id="vary-grid" class="vary-grid"></div>
+  <menu><span class="hint tight">Clic en una para usarla. Puedes deshacer con ⌘Z.</span><span class="spacer"></span>
+    <button id="btn-vary-again">↻ Otra tanda</button></menu>
+</dialog>
+
+<dialog id="dlg-player" class="wide">
+  <div class="dlg-head">
+    <h3 id="player-title"></h3>
+    <button class="ghost icon" data-close title="Cerrar">✕</button>
+  </div>
+  <video id="player" controls loop playsinline></video>
+  <p id="player-note" class="hint tight"></p>
+  <div class="player-meta" id="player-meta"></div>
+  <div class="player-actions">
+    <a id="player-dl" class="btn">⬇ Descargar</a>
+    <button id="player-open" class="ghost">Abrir su escena</button>
+    <button id="player-reveal" class="ghost">Mostrar en Finder</button>
+    <span class="spacer"></span>
+    <button id="player-delete" class="ghost danger">Borrar</button>
+  </div>
+  <div class="extend">
+    <h4>Versión larga para YouTube</h4>
+    <p class="hint tight">Repite el loop sin recodificar: tarda segundos, no pierde calidad y no hace falta renderizar de nuevo.</p>
+    <div class="row">
+      <select id="extend-min">
+        <option value="10">10 minutos</option><option value="30">30 minutos</option>
+        <option value="60" selected>1 hora</option><option value="120">2 horas</option><option value="180">3 horas</option>
+      </select>
+      <button id="btn-extend">Crear versión larga</button>
+    </div>
+  </div>
 </dialog>
 
 <script src="app.js"></script>

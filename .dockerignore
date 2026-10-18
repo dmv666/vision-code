@@ -1,0 +1,9 @@
+.git
+.venv
+.studio
+renders
+studio-data
+brand
+**/__pycache__
+*.mp4
+*.mov
