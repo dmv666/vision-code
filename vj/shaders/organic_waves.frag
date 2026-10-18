@@ -21,7 +21,8 @@ float hash13(vec3 p) {
     return fract((p.x + p.y) * p.z);
 }
 
-float noise3(vec3 x) {
+// Ojo: no llamarla noise3 — es una función interna de GLSL y macOS rechaza redefinirla.
+float value_noise(vec3 x) {
     vec3 i = floor(x);
     vec3 f = fract(x);
     f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -34,7 +35,7 @@ float noise3(vec3 x) {
 float fbm(vec3 p) {
     float s = 0.0, a = 0.5;
     for (int i = 0; i < 5; ++i) {
-        s += a * noise3(p);
+        s += a * value_noise(p);
         p = p * 2.03 + vec3(1.7, 9.2, 3.1);
         a *= 0.5;
     }
