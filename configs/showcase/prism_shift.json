@@ -1,0 +1,44 @@
+{
+  "output": {
+    "path": "renders/prism_shift.mp4",
+    "width": 3840, "height": 2160, "fps": 60,
+    "codec": "hevc", "quality": "high", "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": { "samples": 2, "shutter": 0.5 }
+  },
+  "palette": {
+    "preset": "synthwave",
+    "intensity": 1.15,
+    "cycle": {
+      "palettes": [
+        { "colors": ["#00e5ff", "#2f6bff", "#a8f0ff", "#7b2cff"], "background": "#00040d" },
+        { "colors": ["#ffb000", "#ff2bd6", "#ff6a00", "#ffe066"], "background": "#0d0207" },
+        { "colors": ["#3ee08f", "#00e5ff", "#ccff00", "#0a8f6a"], "background": "#000805" }
+      ],
+      "repeats": 1,
+      "transition": 0.4
+    }
+  },
+  "animation": {
+    "bpm": 124, "bars": 16,
+    "speed": 0.2583, "rotation": 0.0323, "wobble": 0.0645, "hue_cycles": 0,
+    "pulse_strength": 0.55, "pulse_decay": 5.0
+  },
+  "layers": [
+    {
+      "pattern": "kaleidoscope",
+      "params": { "segments": 10, "zoom": 0.6, "complexity": 3, "line_width": 0.004 }
+    },
+    {
+      "pattern": "starfield",
+      "opacity": 0.55,
+      "params": { "layers": 12, "density": 0.08, "size": 0.02, "streak": 2.0 },
+      "animation": { "speed": 0.4844 }
+    }
+  ],
+  "post": {
+    "exposure": 1.05, "bloom": 0.6, "bloom_radius": 1.2,
+    "vignette": 0.4, "grain": 0.015, "chromatic_aberration": 0.0015,
+    "saturation": 1.1, "contrast": 1.05
+  }
+}

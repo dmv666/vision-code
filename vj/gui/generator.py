@@ -126,6 +126,8 @@ def vary(user_cfg: dict, amount: float = 0.35, seed: int | None = None) -> dict:
         cfg["palette"] = random_palette(rng)
         if intensity and "intensity" not in cfg["palette"]:
             cfg["palette"]["intensity"] = intensity
+        if pal.get("cycle"):
+            cfg["palette"]["cycle"] = pal["cycle"]      # la secuencia de colores es parte de la escena
     elif roll < amount * 0.9:
         colors = pal.get("colors") or PRESETS.get(pal.get("preset"), PRESETS["cyberpunk"])["colors"]
         bg = pal.get("background") or PRESETS.get(pal.get("preset"), {}).get("background")

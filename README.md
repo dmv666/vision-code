@@ -231,7 +231,15 @@ rechaza; `glslangValidator` detecta estos casos.
     "preset": "cyberpunk",       // neon | cyberpunk | synthwave | acid | dark_techno | ice | sunset
     "colors": ["#ff2a6d", "#05d9e8"],  // opcional: sustituye al preset (máx. 8, gradiente cíclico)
     "background": "#01012b",
-    "intensity": 1.25            // brillo HDR antes del tonemap
+    "intensity": 1.25,           // brillo HDR antes del tonemap
+    "cycle": {                   // opcional: la paleta va cambiando durante el loop
+      "palettes": [              // base (arriba) → estas, en orden → vuelve a la base
+        { "preset": "ice" },
+        { "colors": ["#ffb000", "#ff2bd6"], "background": "#0d0207" }
+      ],
+      "repeats": 1,              // vueltas de la secuencia por loop (entero)
+      "transition": 0.35         // parte de cada tramo que dura el fundido: 0 = corte seco, 1 = continuo
+    }
   },
   "animation": {                 // animación global (cada capa puede sobrescribir campos)
     "bpm": 128, "bars": 8, "beats_per_bar": 4,   // bars → duración exacta en compases
@@ -258,6 +266,14 @@ rechaza; `glslangValidator` detecta estos casos.
   }
 }
 ```
+
+**Cambio de colores (`palette.cycle`).** Cada paleta de la secuencia ocupa
+un tramo igual del loop (`T / (repeats · nº de paletas)`); con 16 compases y 4
+paletas, cambia cada 4 compases, justo en el golpe. Una capa con colores propios
+(`preset` o `colors`) no hereda la secuencia global, salvo que defina su propio
+`cycle`. En la interfaz: pestaña **Paleta → Cambio de colores en el loop**, con
+botones para girar los tonos de la base o elegir presets al azar. Ejemplo:
+`configs/showcase/prism_shift.json`.
 
 Las velocidades se expresan en unidades "humanas" (por segundo / BPM) y
 `loop.py` las ajusta al entero de ciclos más cercano, también por capa.
@@ -304,6 +320,7 @@ Cualquier término de la forma `g(K · p)` con `g` periódica de periodo 1 cumpl
 | Avance de túnel | `w = z + L · S · p`, se usa `fract(w / S)` | `L` segmentos por loop, entero (patrón con periodo espacial `S`) |
 | Zoom infinito | `log(r)·z − L·p` en log-polar, `fract()` | `L` entero |
 | Ciclo de color | `palette(x + H · p)` con paleta cíclica | `H` entero |
+| Secuencia de paletas | tramo `⌊C · p⌋ mod K`, fundido con la siguiente al final del tramo | `C = repeats · K` cambios por loop, entero |
 
 `loop.py` hace `K = round(velocidad · T)` y avisa si el redondeo deja algo en 0.
 Ejemplo (`hex_tunnel.json`): 8 compases a 128 BPM → `T = 8·4·60/128 = 15 s`,

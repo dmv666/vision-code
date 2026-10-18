@@ -23,18 +23,27 @@ uniform float u_pulse_decay;
 uniform vec3  u_colors[8];
 uniform int   u_num_colors;
 uniform vec3  u_background;
+// Cambio de colores (palette.cycle): paleta siguiente y cuánto se ha fundido ya.
+uniform vec3  u_colors_b[8];
+uniform int   u_num_colors_b;
+uniform float u_palette_mix;  // 0 = solo u_colors, 1 = solo u_colors_b
 uniform float u_weight;       // opacidad^2.2 / muestras de motion blur
 
 const float PI  = 3.14159265358979;
 const float TAU = 6.28318530717959;
 
 // Gradiente cíclico entre los colores de la paleta: palette(x) == palette(x+1).
+// Con palette.cycle se mezcla con la paleta siguiente (u_palette_mix lo calcula la CPU por frame).
 vec3 palette(float x) {
-    float n = float(u_num_colors);
-    float f = fract(x) * n;
+    float f = fract(x) * float(u_num_colors);
     int i = int(floor(f));
-    float t = smoothstep(0.0, 1.0, fract(f));
-    return mix(u_colors[i % u_num_colors], u_colors[(i + 1) % u_num_colors], t);
+    vec3 a = mix(u_colors[i % u_num_colors], u_colors[(i + 1) % u_num_colors], smoothstep(0.0, 1.0, fract(f)));
+    if (u_palette_mix <= 0.0)
+        return a;
+    f = fract(x) * float(u_num_colors_b);
+    i = int(floor(f));
+    vec3 b = mix(u_colors_b[i % u_num_colors_b], u_colors_b[(i + 1) % u_num_colors_b], smoothstep(0.0, 1.0, fract(f)));
+    return mix(a, b, u_palette_mix);
 }
 
 float hash11(float p) {

@@ -10,7 +10,7 @@ import moderngl
 
 from .config import layers_of
 from .loop import LoopPlan
-from .palette import resolve_palette
+from .palette import layer_palette, resolve_color_cycle, resolve_palette
 from .patterns import resolve_pattern
 
 SHADER_DIR = Path(__file__).parent / "shaders"
@@ -88,7 +88,11 @@ class Layer:
         else:
             counters = {**plan.uniforms(), "u_pulse_strength": float(anim["pulse_strength"]),
                         "u_pulse_decay": float(anim["pulse_decay"])}
-        palette = resolve_palette({**cfg["palette"], **spec["palette"]} if spec.get("palette") else cfg["palette"])
+        pcfg = layer_palette(cfg["palette"], spec.get("palette"))
+        palette = resolve_palette(pcfg)
+        palette.update(u_colors_b=palette["u_colors"], u_num_colors_b=palette["u_num_colors"], u_palette_mix=0.0)
+        self.cycle = resolve_color_cycle(pcfg)
+        self.own_background = index == 0
         if index > 0:
             palette["u_background"] = (0.0, 0.0, 0.0)  # el fondo lo pone solo la primera capa
         values = {
@@ -104,9 +108,13 @@ class Layer:
             set_uniforms(prog, values)
 
     def draw(self, phase: float) -> None:
+        values = {"u_phase": phase}
+        if self.cycle:
+            values.update(self.cycle.uniforms(phase))
+            if not self.own_background:
+                values.pop("u_background")
         for prog in self.programs:
-            if "u_phase" in prog:
-                prog["u_phase"].value = phase
+            set_uniforms(prog, values)
         self.vao.render(moderngl.TRIANGLES, vertices=3)
         if self.inst_vao is not None and self.instances:
             self.inst_vao.render(moderngl.TRIANGLES, vertices=6, instances=self.instances)

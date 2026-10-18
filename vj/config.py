@@ -199,3 +199,8 @@ def validate(cfg: dict) -> None:
         raise ConfigError("output.duration debe ser > 0")
     if anim["bars"] is not None and float(anim["bpm"]) <= 0:
         raise ConfigError("animation.bars requiere animation.bpm > 0")
+    from .palette import resolve_color_cycle   # import tardío: palette no depende de config
+    try:
+        resolve_color_cycle(cfg["palette"])
+    except ValueError as e:
+        raise ConfigError(str(e)) from None

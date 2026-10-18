@@ -331,6 +331,8 @@ async function updatePlan() {
     state.plan = await api("/api/plan", { config: state.cfg });
     renderPlan();
     updatePhaseLabel();
+    const t = document.querySelector(".cycle-timing");
+    if (t && state.cfg.palette?.cycle) t.textContent = cycleTiming(state.cfg.palette.cycle);
     renderRenderHint();
     updateOutPath();
   } catch (e) { banner(e.message); }
@@ -596,6 +598,136 @@ function tabPalette(panel) {
     slider("Intensidad", { get: () => p.intensity ?? 1, set: (v) => { p.intensity = v; },
                            min: 0, max: 3, step: 0.01, dflt: 1 }),
   );
+  colorCycleSection(panel, p);
+}
+
+// ---- Cambio de colores durante el loop (palette.cycle)
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+}
+function hslToHex(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return "#" + [r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("");
+}
+const rotateHue = (hex, deg) => { const [h, s, l] = hexToHsl(hex); return hslToHex((h + deg + 360) % 360, s, l); };
+
+const paletteColors = (pal) => pal.colors || state.meta.presets[pal.preset]?.colors || ["#ffffff"];
+const paletteBg = (pal) => pal.background || state.meta.presets[pal.preset]?.background || "#000000";
+
+function cycleTiming(cyc) {
+  const changes = (cyc.repeats ?? 1) * (cyc.palettes.length + 1);
+  const p = state.plan;
+  if (!p) return "";
+  let txt = `${changes} cambios por loop · cada ${(p.duration / changes).toFixed(2)} s`;
+  const beats = p.cycles.beats;
+  if (beats && beats % changes === 0) {
+    const per = beats / changes, bpb = val("animation.beats_per_bar");
+    txt += per % bpb === 0 ? ` (${per / bpb} ${per / bpb > 1 ? "compases" : "compás"})` : ` (${per} golpes)`;
+  } else if (beats) txt += " · no cae en los golpes: ajusta las vueltas o el número de paletas";
+  return txt;
+}
+
+function colorCycleSection(panel, p) {
+  const on = !!p.cycle?.palettes?.length;
+  const box = el("div", { class: "cycle" });
+  box.append(el("h4", {}, "Cambio de colores en el loop"),
+    el("label", { class: "toggle" }, el("input", { type: "checkbox", checked: on, onchange: (e) => {
+      if (e.target.checked) {
+        const base = paletteColors(p);
+        p.cycle = { palettes: [{ colors: base.map((c) => rotateHue(c, 120)), background: rotateHue(paletteBg(p), 120) },
+                               { colors: base.map((c) => rotateHue(c, 240)), background: rotateHue(paletteBg(p), 240) }],
+                    repeats: 1, transition: 0.35 };
+      } else delete p.cycle;
+      changed({ rerender: true });
+    } }), "La paleta va cambiando a lo largo del loop"));
+  panel.append(box);
+  if (!on) {
+    box.append(el("p", { class: "hint" }, "Define una secuencia de paletas: el loop pasa de una a otra y la última enlaza con la primera, sin salto."));
+    return;
+  }
+  const cyc = p.cycle;
+  cyc.repeats ??= 1;
+  cyc.transition ??= 0.35;
+  const timing = el("p", { class: "hint tight cycle-timing" }, cycleTiming(cyc));
+  const seq = el("div", { class: "cycle-seq" });
+  const strip = (cols, bg) => el("div", { class: "g", style: `background:${gradientCss(cols)};box-shadow:inset 0 0 0 3px ${bg}` });
+  seq.append(el("div", { class: "cycle-item base" }, el("b", {}, "1 · base"), strip(paletteColors(p), paletteBg(p)),
+    el("small", { class: "hint" }, "la de arriba")));
+
+  cyc.palettes.forEach((pal, i) => {
+    const presetNames = Object.keys(state.meta.presets);
+    const custom = Array.isArray(pal.colors);
+    const move = (d) => {
+      const j = i + d;
+      if (j < 0 || j >= cyc.palettes.length) return;
+      [cyc.palettes[i], cyc.palettes[j]] = [cyc.palettes[j], cyc.palettes[i]];
+      changed({ rerender: true });
+    };
+    const kind = el("select", { "aria-label": `Paleta ${i + 2}` },
+      el("option", { value: "__custom", selected: custom }, "Personalizada"),
+      presetNames.map((n) => el("option", { value: n, selected: !custom && pal.preset === n }, n.replaceAll("_", " "))));
+    kind.addEventListener("change", () => {
+      if (kind.value === "__custom") { pal.colors = [...paletteColors(pal)]; pal.background = paletteBg(pal); delete pal.preset; }
+      else { pal.preset = kind.value; delete pal.colors; delete pal.background; }
+      changed({ rerender: true });
+    });
+    const item = el("div", { class: "cycle-item" },
+      el("div", { class: "card-head" }, el("b", {}, `${i + 2}`), kind,
+        el("button", { class: "small ghost", title: "Antes", onclick: () => move(-1) }, "↑"),
+        el("button", { class: "small ghost", title: "Después", onclick: () => move(1) }, "↓"),
+        el("button", { class: "small ghost", title: "Duplicar", onclick: () => { cyc.palettes.splice(i + 1, 0, clone(pal)); changed({ rerender: true }); } }, "⧉"),
+        el("button", { class: "small ghost danger", title: "Quitar", onclick: () => {
+          cyc.palettes.splice(i, 1);
+          if (!cyc.palettes.length) delete p.cycle;
+          changed({ rerender: true });
+        } }, "✕")));
+    if (custom) {
+      const sw = el("div", { class: "swatches" });
+      pal.colors.forEach((c, k) => {
+        const inp = el("input", { type: "color", value: c, "aria-label": `Paleta ${i + 2}, color ${k + 1}` });
+        inp.addEventListener("input", () => { pal.colors[k] = inp.value; changed(); });
+        inp.addEventListener("change", () => renderPanel());
+        sw.append(el("span", { class: "swatch" }, inp, pal.colors.length > 1 ? el("button", {
+          class: "small ghost", title: "Quitar color", onclick: () => { pal.colors.splice(k, 1); changed({ rerender: true }); },
+        }, "✕") : null));
+      });
+      if (pal.colors.length < 8) sw.append(el("button", { class: "small", onclick: () => { pal.colors.push(pal.colors.at(-1)); changed({ rerender: true }); } }, "+"));
+      const bg = el("input", { type: "color", value: paletteBg(pal), "aria-label": `Paleta ${i + 2}, fondo`, title: "Fondo" });
+      bg.addEventListener("input", () => { pal.background = bg.value; changed(); });
+      item.append(sw, el("label", { class: "toggle" }, bg, "fondo"));
+    }
+    item.append(strip(paletteColors(pal), paletteBg(pal)));
+    seq.append(item);
+  });
+  box.append(seq, el("div", { class: "row", style: "display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px" },
+    el("button", { class: "small", onclick: () => {
+      const last = cyc.palettes.at(-1) || p;
+      cyc.palettes.push({ colors: paletteColors(last).map((c) => rotateHue(c, 60)), background: rotateHue(paletteBg(last), 60) });
+      changed({ rerender: true });
+    } }, "+ Añadir paleta"),
+    el("button", { class: "small ghost", title: "Reemplaza la secuencia por la base girada en el círculo cromático", onclick: () => {
+      const n = cyc.palettes.length + 1, base = paletteColors(p);
+      cyc.palettes = Array.from({ length: n - 1 }, (_, k) => ({
+        colors: base.map((c) => rotateHue(c, (360 * (k + 1)) / n)), background: rotateHue(paletteBg(p), (360 * (k + 1)) / n) }));
+      changed({ rerender: true });
+    } }, "✦ Girar tonos de la base"),
+    el("button", { class: "small ghost", title: "Paletas al azar entre los presets", onclick: () => {
+      const names = Object.keys(state.meta.presets).filter((n) => n !== p.preset).sort(() => Math.random() - 0.5);
+      cyc.palettes = cyc.palettes.map((_, k) => ({ preset: names[k % names.length] }));
+      changed({ rerender: true });
+    } }, "🎲 Presets al azar")));
+  box.append(
+    slider("Vueltas de la secuencia por loop", { get: () => cyc.repeats, set: (v) => { cyc.repeats = Math.max(1, v); timing.textContent = cycleTiming(cyc); },
+                                                  min: 1, max: 16, step: 1, int: true, dflt: 1 }),
+    slider("Transición (0 = corte seco, 1 = fundido continuo)", { get: () => cyc.transition, set: (v) => { cyc.transition = v; },
+                                                                   min: 0, max: 1, step: 0.05, dflt: 0.35 }),
+    timing);
 }
 
 // ---- Animación

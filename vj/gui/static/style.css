@@ -302,3 +302,17 @@ pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 
 .share-url { padding: 6px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }
 .share-url a { color: var(--cyan); }
 .share-code { font-size: 20px; letter-spacing: .08em; padding: 8px 12px; background: var(--bg); border: 1px dashed #3a3a5c; border-radius: 8px; text-align: center; }
+
+/* ---- cambio de colores ---- */
+.cycle { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
+.cycle h4 { margin: 0 0 8px; }
+.cycle > .toggle { margin-bottom: 10px; color: var(--text); }
+.cycle-seq { display: flex; flex-direction: column; gap: 8px; }
+.cycle-item { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--panel-2); }
+.cycle-item .card-head { margin-bottom: 6px; }
+.cycle-item .card-head select { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.cycle-item .g { height: 14px; border-radius: 5px; margin-top: 6px; }
+.cycle-item.base { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.cycle-item.base .g { margin: 0; }
+.cycle-item .toggle input[type=color] { width: 28px; height: 22px; border: 1px solid var(--line); border-radius: 5px; padding: 0; background: none; }
+.cycle-timing { color: var(--cyan); }
