@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+renders/
+*.mp4
+*.mov

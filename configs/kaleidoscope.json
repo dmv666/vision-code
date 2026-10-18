@@ -1,0 +1,14 @@
+{
+  "output": {
+    "path": "renders/kaleidoscope.mp4",
+    "width": 3840, "height": 2160, "fps": 60, "duration": 12,
+    "codec": "h264", "quality": "high", "supersample": 2,
+    "motion_blur": { "samples": 2, "shutter": 0.5 }
+  },
+  "geometry": { "pattern": "kaleidoscope", "params": { "segments": 10, "complexity": 2 } },
+  "palette": { "preset": "neon", "intensity": 1.1 },
+  "animation": {
+    "bpm": 140, "speed": 0.5, "rotation": -0.0833, "wobble": 0.0833, "hue_cycles": 0.0833,
+    "pulse_strength": 0.6, "pulse_decay": 4.0
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "output": {
+    "path": "renders/particle_sphere.mp4",
+    "width": 3840, "height": 2160, "fps": 60,
+    "codec": "prores", "quality": "hq",
+    "supersample": 2,
+    "motion_blur": { "samples": 3, "shutter": 0.5 }
+  },
+  "geometry": {
+    "pattern": "particle_sphere",
+    "params": { "count": 320, "shells": 2, "size": 0.006, "displacement": 0.08 }
+  },
+  "palette": { "colors": ["#00f0ff", "#ff00e6", "#ffffff", "#7a00ff"], "background": "#020006", "intensity": 1.3 },
+  "animation": {
+    "bpm": 124, "bars": 4,
+    "speed": 0, "rotation": 0.129, "wobble": 0.13, "hue_cycles": 0.065,
+    "pulse_strength": 0.8, "pulse_decay": 6.0
+  },
+  "post": { "exposure": 1.0, "vignette": 0.3, "grain": 0.012, "chromatic_aberration": 0.001 }
+}

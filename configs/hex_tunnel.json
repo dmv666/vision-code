@@ -1,0 +1,37 @@
+{
+  "output": {
+    "path": "renders/hex_tunnel.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "codec": "h264",
+    "quality": "high",
+    "supersample": 2,
+    "motion_blur": { "samples": 4, "shutter": 0.5 }
+  },
+  "geometry": {
+    "pattern": "hex_tunnel",
+    "params": {
+      "sides": 6,
+      "radius": 1.0,
+      "segment": 1.0,
+      "line_width": 0.03,
+      "twist": 0.06,
+      "fog": 16.0,
+      "grid": 3,
+      "panel_density": 0.12
+    }
+  },
+  "palette": { "preset": "cyberpunk", "intensity": 1.2 },
+  "animation": {
+    "bpm": 128,
+    "bars": 8,
+    "speed": 2.0,
+    "rotation": 0.0625,
+    "wobble": 0.125,
+    "hue_cycles": 0.0,
+    "pulse_strength": 0.7,
+    "pulse_decay": 5.0
+  },
+  "post": { "exposure": 1.1, "vignette": 0.4, "grain": 0.015, "chromatic_aberration": 0.0015 }
+}
