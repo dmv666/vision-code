@@ -29,6 +29,31 @@ python -m vj configs/showcase/liquid_temple.json \
 Si un patrón aparece dos veces (p. ej. dos `hex_tunnel` en `techno_prism`), usa
 el índice (`layers.0`, `layers.1`); el error te indica cuáles hay.
 
+## Interfaz (sin comandos)
+
+```bash
+python -m vj.gui          # abre http://127.0.0.1:8765 en el navegador
+```
+
+En macOS basta con **doble clic en `Prism Loops Studio.command`** (activa el
+`.venv` si existe). La primera vez, si macOS pide confirmación: clic derecho →
+Abrir. Para apagarla, cierra la ventana de Terminal que se abre.
+
+- **Izquierda:** todas las configuraciones de `configs/` (buscador incluido).
+- **Centro:** vista previa en vivo: se actualiza al mover cualquier control.
+  El deslizador recorre el loop; **▶ Animar** lo reproduce en vista rápida;
+  **Calidad final** activa supersampling y motion blur; **Comprobar loop** hace
+  la verificación numérica. Debajo, el plan del loop y sus redondeos.
+- **Derecha:** pestañas Escena (patrón o capas, con sus parámetros), Paleta
+  (presets o colores propios), Animación, Salida (resolución, fps, duración,
+  codec), Post y JSON.
+- **Renderizar:** cola de renders con progreso, fps, tiempo restante, cancelar y
+  «Mostrar en Finder». Cada render corre en su propio proceso.
+- **Guardar / Guardar como… (⌘S):** escribe en `configs/` (p. ej. `configs/mine/`).
+
+La interfaz solo escucha en `127.0.0.1` (no es accesible desde la red) y no
+necesita dependencias extra.
+
 ## Instalación en macOS (Apple Silicon o Intel)
 
 ```bash
@@ -78,6 +103,8 @@ config.json ──► config.py ──► loop.py ──────────
 | `vj/patterns.py` | Registro de patrones: shader + parámetros por defecto |
 | `vj/renderer.py` | Contexto GL offscreen, capas aditivas, supersampling, motion blur, mipmaps para bloom |
 | `vj/encoder.py` | Candidatos por codec, prueba de hardware, escritor en hilo, PNG para stills |
+| `vj/check.py` | Verificación numérica del loop (CLI e interfaz) |
+| `vj/gui/` | Interfaz web local: servidor (`server.py`), GPU y cola de renders (`worker.py`), rangos de controles (`schema.py`), frontend (`static/`) |
 | `vj/shaders/core.glsl` | Uniforms y utilidades válidas en vertex y fragment: `palette()`, `pulse()`, `rot()` |
 | `vj/shaders/common.glsl` | `core.glsl` + utilidades solo de fragment: `line_aa()`, `centered_uv()`, `emit()` |
 | `vj/shaders/<patrón>.frag` | Un archivo por geometría |

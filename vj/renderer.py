@@ -113,7 +113,11 @@ class Layer:
 
 
 class Renderer:
-    def __init__(self, cfg: dict, plan: LoopPlan, width: int | None = None, height: int | None = None):
+    """Renderiza frames de un config. Con `ctx` reutiliza un contexto GL existente
+    (la interfaz hace muchas previsualizaciones seguidas); sin él crea uno propio."""
+
+    def __init__(self, cfg: dict, plan: LoopPlan, width: int | None = None, height: int | None = None,
+                 ctx: moderngl.Context | None = None):
         out = cfg["output"]
         self.plan = plan
         self.width = width or out["width"]
@@ -122,7 +126,8 @@ class Renderer:
         self.blur_samples = int(out["motion_blur"]["samples"])
         self.shutter = float(out["motion_blur"]["shutter"])
 
-        self.ctx = create_context()
+        self.owns_ctx = ctx is None
+        self.ctx = ctx or create_context()
         self.gpu = self.ctx.info.get("GL_RENDERER", "?")
         max_tex = self.ctx.info.get("GL_MAX_TEXTURE_SIZE", 16384)
         if max(self.width, self.height) * self.ss > max_tex:
@@ -185,4 +190,14 @@ class Renderer:
         return self.out_fbo.read(components=3, alignment=1)
 
     def release(self) -> None:
-        self.ctx.release()
+        if self.owns_ctx:
+            self.ctx.release()
+            return
+        # Contexto compartido: liberar solo los objetos de este renderer.
+        objs = [self.post_vao, self.post, self.out_fbo, self.accum_fbo, self.accum]
+        for layer in self.layers:
+            objs += [layer.vao, *layer.programs]
+            if layer.inst_vao is not None:
+                objs.append(layer.inst_vao)
+        for obj in objs:
+            obj.release()

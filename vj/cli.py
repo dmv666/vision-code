@@ -6,11 +6,10 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-
 from .config import ConfigError, layers_of, load_config, wants_hardware
 from .encoder import FFmpegWriter, resolve_output_path, save_png, select_encoder
 from .loop import plan_loop
+from .check import measure_loop
 from .renderer import Renderer
 
 
@@ -35,41 +34,17 @@ def parse_args(argv=None):
     return ap.parse_args(argv)
 
 
-def frame_delta(a: bytes, b: bytes) -> float:
-    x = np.frombuffer(a, np.uint8).astype(np.int16)
-    y = np.frombuffer(b, np.uint8).astype(np.int16)
-    return float(np.abs(x - y).mean())
-
-
 def check_loop(renderer: Renderer) -> int:
-    """Prueba definitiva: el frame N (que no se exporta) debe ser idéntico al frame 0.
-
-    Si f(fase=1) == f(fase=0), la transición N-1 → 0 del archivo es exactamente
-    la misma que N-1 → N de una animación continua: no puede haber costura.
-    """
-    plan = renderer.plan
-    n = plan.frames
-    f0, f1, f_last = (renderer.render(i) for i in (0, 1, n - 1))
-    f_n = renderer.render(n, wrap=False)  # fase 1.0 real, no envuelta a 0
-    exact = frame_delta(f0, f_n)
-    seam = frame_delta(f_last, f0)
-    diff = np.abs(np.frombuffer(f0, np.uint8).astype(np.int16) - np.frombuffer(f_n, np.uint8).astype(np.int16))
-    bad = int((diff > 2).sum())
-    print(f"  |frame N − frame 0|        = {exact:.4f} media, máx {int(diff.max())}, "
-          f"{bad} valores > 2  (deben ser ~0 y 0)")
-    print(f"  costura  frame N-1 → 0     = {seam:.4f}")
-    print(f"  paso     frame 0 → 1       = {frame_delta(f0, f1):.4f}")
-    if plan.beats > 1 and n % plan.beats == 0:
-        # El frame 0 cae en un golpe (ataque del pulso). La referencia justa es
-        # otro paso que también cae en un golpe, a mitad del loop.
-        m = (plan.beats // 2) * (n // plan.beats)
-        ref = frame_delta(renderer.render(m - 1), renderer.render(m))
-        print(f"  paso en otro golpe {m - 1}→{m} = {ref:.4f}  (la costura debería parecerse)")
-    # Criterio por píxel, no por media: un salto local (una costura en el ruido,
-    # una zona de la imagen) puede ser muy visible con una media casi nula.
-    ok = bad == 0
-    print("  ✓ loop perfecto" if ok else "  ✗ el loop tiene un salto: hay términos no periódicos en el shader")
-    return 0 if ok else 1
+    r = measure_loop(renderer)
+    print(f"  |frame N − frame 0|        = {r['mean']:.4f} media, máx {r['max']}, "
+          f"{r['bad']} valores > 2  (deben ser ~0 y 0)")
+    print(f"  costura  frame N-1 → 0     = {r['seam']:.4f}")
+    print(f"  paso     frame 0 → 1       = {r['step']:.4f}")
+    if r["beat_step"] is not None:
+        a, b = r["beat_frames"]
+        print(f"  paso en otro golpe {a}→{b} = {r['beat_step']:.4f}  (la costura debería parecerse)")
+    print("  ✓ loop perfecto" if r["ok"] else "  ✗ el loop tiene un salto: hay términos no periódicos en el shader")
+    return 0 if r["ok"] else 1
 
 
 def main(argv=None) -> int:

@@ -138,6 +138,15 @@ def apply_override(cfg: dict, expr: str) -> None:
         path = f"{path}.{part}" if path else part
 
 
+def config_from_dict(user: dict, overrides: list[str] | None = None) -> dict:
+    """Como load_config, pero desde un dict ya cargado (lo usa la interfaz)."""
+    cfg = deep_merge(DEFAULTS, user)
+    for expr in overrides or []:
+        apply_override(cfg, expr)
+    validate(cfg)
+    return cfg
+
+
 def load_config(path: str | Path, overrides: list[str] | None = None) -> dict:
     user = _read_file(Path(path))
     cfg = deep_merge(DEFAULTS, user)

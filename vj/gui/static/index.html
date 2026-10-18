@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism Loops Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="prism"></span>Prism Loops <em>Studio</em></div>
+  <div class="file">
+    <span id="file-name">—</span><span id="dirty" class="dirty" hidden>●</span>
+  </div>
+  <div class="actions">
+    <button id="btn-revert" class="ghost" title="Descartar cambios">Revertir</button>
+    <button id="btn-saveas" class="ghost">Guardar como…</button>
+    <button id="btn-save">Guardar <kbd>⌘S</kbd></button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <input id="search" type="search" placeholder="Buscar configuración…">
+    <nav id="config-list"></nav>
+    <div class="gpu" id="gpu"></div>
+  </aside>
+
+  <main class="center">
+    <div id="banner" class="banner" hidden></div>
+    <section class="preview-card">
+      <div class="stage" id="stage">
+        <img id="preview" alt="Vista previa">
+        <img id="flip" alt="" hidden>
+        <div class="spinner" id="spinner" hidden></div>
+      </div>
+      <div class="scrub">
+        <button id="btn-play" class="ghost" title="Ver el loop animado (vista rápida)">▶ Animar</button>
+        <input id="phase" type="range" min="0" max="1" step="0.001" value="0">
+        <span id="phase-label" class="mono">0.0 s</span>
+        <label class="toggle" title="Supersampling y motion blur como en el render final (más lento)">
+          <input id="hq" type="checkbox"> Calidad final
+        </label>
+        <button id="btn-check" class="ghost" title="Verifica que el último frame enlaza con el primero">Comprobar loop</button>
+      </div>
+      <div class="plan" id="plan"></div>
+    </section>
+
+    <section class="render-card">
+      <div class="render-row">
+        <input id="out-path" class="mono" type="text" spellcheck="false">
+        <button id="btn-render" class="primary">Renderizar</button>
+      </div>
+      <div id="jobs"></div>
+    </section>
+  </main>
+
+  <aside class="editor">
+    <nav class="tabs" id="tabs">
+      <button data-tab="scene" class="active">Escena</button>
+      <button data-tab="palette">Paleta</button>
+      <button data-tab="animation">Animación</button>
+      <button data-tab="output">Salida</button>
+      <button data-tab="post">Post</button>
+      <button data-tab="json">JSON</button>
+    </nav>
+    <div class="panel" id="panel"></div>
+  </aside>
+</div>
+
+<dialog id="dlg-saveas">
+  <form method="dialog">
+    <h3>Guardar como</h3>
+    <label>Carpeta <input id="saveas-folder" type="text" value="mine"></label>
+    <label>Nombre <input id="saveas-name" type="text" required pattern="[A-Za-z0-9_\-]+"></label>
+    <p class="hint">Se guarda en <span class="mono">configs/&lt;carpeta&gt;/&lt;nombre&gt;.json</span></p>
+    <menu><button value="cancel" class="ghost">Cancelar</button><button value="ok" id="saveas-ok">Guardar</button></menu>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
