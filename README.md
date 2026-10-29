@@ -29,6 +29,12 @@ python -m vj configs/showcase/liquid_temple.json \
 Si un patrón aparece dos veces (p. ej. dos `hex_tunnel` en `techno_prism`), usa
 el índice (`layers.0`, `layers.1`); el error te indica cuáles hay.
 
+## Extra: Tube Saver (descargar audio/vídeo de YouTube)
+
+App personal aparte en [`tubedl/`](tubedl/README.md): doble clic en
+`Tube Saver.command` (macOS/Linux) o `Tube Saver.bat` (Windows), pega un enlace
+y elige MP3/M4A/Opus/WAV o MP4 en la calidad que quieras.
+
 ## Prism Loops Studio (interfaz, sin comandos)
 
 | Sistema | Abrir | Compartir con tu red |

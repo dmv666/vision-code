@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tube Saver</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e3e3e0;
+    --accent: #e5322d; --accent-text: #fff; --ok: #1f8a4c; --err: #c62828; --track: #ececea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121214; --card: #1c1c1f; --text: #f2f2f2; --muted: #9a9aa2; --line: #2c2c31;
+      --accent: #ff4b45; --accent-text: #fff; --ok: #4cc283; --err: #ff6b6b; --track: #2a2a2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  h1 .logo { width: 30px; height: 22px; border-radius: 6px; background: var(--accent); position: relative; }
+  h1 .logo::after { content: ""; position: absolute; left: 12px; top: 6px;
+    border-left: 9px solid #fff; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 18px; }
+  .row { display: flex; gap: 8px; }
+  input[type=url] { flex: 1; min-width: 0; padding: 12px 14px; font-size: 15px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  input[type=url]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { padding: 11px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg);
+    color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button:disabled { opacity: .55; cursor: default; }
+  .msg { margin-top: 10px; font-size: 14px; }
+  .msg.err { color: var(--err); }
+  .info { display: none; gap: 14px; margin-top: 16px; }
+  .info img { width: 180px; max-width: 40%; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; background: var(--track); }
+  .info .t { font-weight: 650; }
+  .info .m { color: var(--muted); font-size: 13px; }
+  .opts { display: none; margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .seg button { border: 0; border-radius: 0; background: transparent; }
+  .seg button.on { background: var(--text); color: var(--bg); }
+  select { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  .opts .row { align-items: center; flex-wrap: wrap; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  .job, .file { padding: 10px 0; border-top: 1px solid var(--line); }
+  .job:first-of-type, .file:first-of-type { border-top: 0; }
+  .job .top, .file { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .bar { height: 6px; background: var(--track); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+  .done .bar i { background: var(--ok); }
+  .error .tag { color: var(--err); white-space: normal; text-align: right; }
+  .file .acts { display: flex; gap: 6px; flex-shrink: 0; }
+  .file a, .file button { font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+    color: var(--text); text-decoration: none; background: var(--bg); font-weight: 600; }
+  .empty { color: var(--muted); font-size: 14px; }
+  .warn { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err);
+    padding: 10px 14px; border-radius: 10px; margin-bottom: 18px; display: none; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; }
+  @media (max-width: 520px) { .info { flex-direction: column; } .info img { width: 100%; max-width: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1><span class="logo"></span>Tube Saver</h1>
+  <p class="sub">Pega un enlace de YouTube y descarga el audio o el vídeo.</p>
+  <div class="warn" id="warn">No se encontró <b>ffmpeg</b>. Instálalo para convertir audio y unir vídeo con sonido.</div>
+
+  <section class="card">
+    <form class="row" id="form">
+      <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=…" required autocomplete="off">
+      <button class="primary" id="go">Buscar</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <div class="info" id="info">
+      <img id="thumb" alt="">
+      <div><div class="t" id="title"></div><div class="m" id="meta"></div></div>
+    </div>
+    <div class="opts" id="opts">
+      <div class="seg" id="kind">
+        <button type="button" data-k="audio" class="on">Audio</button>
+        <button type="button" data-k="video">Vídeo</button>
+      </div>
+      <div class="row">
+        <select id="option"></select>
+        <button class="primary" id="dl" type="button">Descargar</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Descargas</h2>
+    <div id="jobs"><div class="empty">Nada por ahora.</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Mis archivos</h2>
+    <div id="files"><div class="empty">Todavía no hay archivos.</div></div>
+  </section>
+  <footer id="foot"></footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const AUDIO_LABEL = { mp3: "MP3 (máxima calidad)", m4a: "M4A / AAC", opus: "Opus", wav: "WAV (sin pérdida)" };
+let kind = "audio", current = null, heights = [];
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Error " + r.status);
+  return data;
+}
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const dur = s => s ? [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60]
+  .filter((v, i) => v || i).map((v, i) => i ? String(v).padStart(2, "0") : v).join(":") : "";
+const size = b => b >= 1 << 30 ? (b / (1 << 30)).toFixed(2) + " GB"
+  : b >= 1 << 20 ? (b / (1 << 20)).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+
+function fillOptions() {
+  const sel = $("option");
+  if (kind === "audio") {
+    sel.innerHTML = Object.entries(AUDIO_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+  } else {
+    const std = [2160, 1440, 1080, 720, 480, 360].filter(h => !heights.length || heights.some(x => x >= h) );
+    sel.innerHTML = `<option value="best">Mejor calidad disponible</option>` +
+      std.map(h => `<option value="${h}">Hasta ${h}p</option>`).join("");
+  }
+}
+
+$("kind").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  kind = b.dataset.k;
+  for (const x of $("kind").children) x.classList.toggle("on", x === b);
+  fillOptions();
+});
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const url = $("url").value.trim();
+  $("msg").className = "msg"; $("msg").textContent = "Buscando…";
+  $("go").disabled = true; $("info").style.display = "none"; $("opts").style.display = "none";
+  try {
+    const info = await api("/api/info", { url });
+    current = url; heights = info.heights || [];
+    $("thumb").style.display = info.thumbnail ? "" : "none";
+    $("thumb").src = info.thumbnail || "";
+    $("title").textContent = info.title || "";
+    $("meta").textContent = [info.uploader, dur(info.duration),
+      heights.length ? "hasta " + heights[0] + "p" : ""].filter(Boolean).join(" · ");
+    $("info").style.display = "flex"; $("opts").style.display = "block"; $("msg").textContent = "";
+    fillOptions();
+  } catch (err) {
+    $("msg").className = "msg err"; $("msg").textContent = err.message;
+  } finally { $("go").disabled = false; }
+});
+
+$("dl").addEventListener("click", async () => {
+  if (!current) return;
+  $("dl").disabled = true;
+  try {
+    await api("/api/download", { url: current, kind, option: $("option").value });
+    $("msg").className = "msg"; $("msg").textContent = "Añadido a la cola.";
+    poll();
+  } catch (err) {
+    $("msg").className = "msg err"; $("msg").textContent = err.message;
+  } finally { $("dl").disabled = false; }
+});
+
+const STATUS = { queued: "En cola", downloading: "Descargando", processing: "Procesando…", done: "Listo", error: "Error" };
+let lastDone = "";
+async function poll() {
+  const jobs = await api("/api/jobs").catch(() => []);
+  $("jobs").innerHTML = jobs.length ? jobs.map(j => `
+    <div class="job ${j.status}">
+      <div class="top"><span class="name">${esc(j.title || j.filename || j.url)}</span>
+      <span class="tag">${j.kind === "audio" ? j.option.toUpperCase() : (j.option === "best" ? "MP4" : j.option + "p")} ·
+        ${j.status === "error" ? esc(j.error) : STATUS[j.status]}
+        ${j.status === "downloading" ? `${j.progress.toFixed(0)}% ${esc(j.speed)}` : ""}</span></div>
+      <div class="bar"><i style="width:${j.status === "error" ? 0 : j.progress}%"></i></div>
+    </div>`).join("") : `<div class="empty">Nada por ahora.</div>`;
+  const doneKey = jobs.filter(j => j.status === "done").map(j => j.id).join();
+  if (doneKey !== lastDone) { lastDone = doneKey; loadFiles(); }
+  if (jobs.some(j => !["done", "error"].includes(j.status))) setTimeout(poll, 800);
+}
+
+async function loadFiles() {
+  const files = await api("/api/files").catch(() => []);
+  $("files").innerHTML = files.length ? files.map(f => {
+    const u = "/files/" + encodeURIComponent(f.name);
+    return `<div class="file"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="acts"><span class="tag">${size(f.size)}</span>
+      <a href="${u}" download>Guardar</a><button data-del="${esc(f.name)}">Borrar</button></span></div>`;
+  }).join("") : `<div class="empty">Todavía no hay archivos.</div>`;
+}
+$("files").addEventListener("click", async e => {
+  const name = e.target.dataset?.del; if (!name || !confirm("¿Borrar " + name + "?")) return;
+  await fetch("/files/" + encodeURIComponent(name), { method: "DELETE" });
+  loadFiles();
+});
+
+api("/api/status").then(s => {
+  if (!s.ffmpeg) $("warn").style.display = "block";
+  $("foot").textContent = "Carpeta de descargas: " + s.out_dir;
+});
+fillOptions(); poll(); loadFiles();
+</script>
+</body>
+</html>

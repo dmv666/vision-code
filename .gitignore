@@ -6,3 +6,5 @@ renders/
 .studio/
 .venv/
 studio-data/
+.venv-tubedl/
+descargas/
