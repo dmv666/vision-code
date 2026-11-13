@@ -1,0 +1,59 @@
+{
+  "output": {
+    "path": "renders/gyroid_cathedral.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "palette": {
+    "colors": [
+      "#00e5ff",
+      "#7b2cff",
+      "#ff2bd6",
+      "#2f6bff"
+    ],
+    "background": "#000208",
+    "intensity": 1.2
+  },
+  "animation": {
+    "bpm": 128,
+    "bars": 16,
+    "speed": 0.0667,
+    "rotation": 0.0,
+    "wobble": 0.0333,
+    "hue_cycles": 0.0333,
+    "pulse_strength": 0.5,
+    "pulse_decay": 5.0
+  },
+  "layers": [
+    {
+      "pattern": "gyroid",
+      "params": {
+        "scale": 3.0,
+        "thickness": 0.03,
+        "steps": 90,
+        "tunnel": 0.16,
+        "glow": 1.0,
+        "fog": 2.0
+      }
+    }
+  ],
+  "post": {
+    "exposure": 1.05,
+    "bloom": 0.8,
+    "bloom_radius": 1.4,
+    "vignette": 0.4,
+    "grain": 0.012,
+    "chromatic_aberration": 0.0015,
+    "saturation": 1.1,
+    "contrast": 1.05
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "output": {
+    "path": "renders/escher_infinity.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "palette": {
+    "preset": "synthwave",
+    "intensity": 1.2
+  },
+  "animation": {
+    "bpm": 124,
+    "bars": 16,
+    "speed": 0.0323,
+    "rotation": 0.0323,
+    "wobble": 0.0323,
+    "hue_cycles": 0,
+    "pulse_strength": 0.6,
+    "pulse_decay": 5.0
+  },
+  "layers": [
+    {
+      "pattern": "hyperbolic",
+      "params": {
+        "p": 7,
+        "q": 3,
+        "scale": 0.95,
+        "drift": 0.4,
+        "line_width": 0.012,
+        "fill": 1.0
+      }
+    }
+  ],
+  "post": {
+    "exposure": 1.05,
+    "bloom": 0.6,
+    "bloom_radius": 1.2,
+    "vignette": 0.4,
+    "grain": 0.012,
+    "chromatic_aberration": 0.0015,
+    "saturation": 1.1,
+    "contrast": 1.05
+  }
+}

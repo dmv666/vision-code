@@ -46,6 +46,12 @@ vec3 palette(float x) {
     return mix(a, b, u_palette_mix);
 }
 
+// Ángulo de K vueltas enteras por loop, exacto en el cierre: fract(K·1) == 0 bit a
+// bit, así que fase 1 y fase 0 dan el mismo valor. Imprescindible en escenas
+// caóticas (fractales, raymarching), donde un error de 1e-6 en sin(TAU·K) se
+// amplifica hasta cambiar píxeles enteros.
+float cyc(float k) { return TAU * fract(k * u_phase); }
+
 float hash11(float p) {
     p = fract(p * 0.1031);
     p *= p + 33.33;

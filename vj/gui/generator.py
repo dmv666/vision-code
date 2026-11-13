@@ -16,7 +16,7 @@ from ..patterns import PATTERNS
 from .schema import SECTIONS, param_range
 
 # Patrones que funcionan bien como capa encima de otro (aportan luz, no tapan).
-OVERLAYS = ["starfield", "particle_sphere", "kaleidoscope", "organic_waves"]
+OVERLAYS = ["starfield", "particle_sphere", "kaleidoscope", "organic_waves", "quasicrystal"]
 BPMS = [0, 90, 100, 110, 120, 124, 128, 135, 140, 150, 174]
 
 

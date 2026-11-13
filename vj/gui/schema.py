@@ -17,7 +17,10 @@ PARAM_RANGES: dict[str, tuple[float, float, float]] = {
     "horizon": (-0.45, 0.45, 0.005), "twist": (-0.4, 0.4, 0.005), "floor": (-0.45, 0.0, 0.005),
     "density": (0.0, 1.0, 0.01), "lights": (0.0, 1.0, 0.01), "trees": (0.0, 1.0, 0.01),
     "panel_density": (0.0, 1.0, 0.01), "streams": (0.0, 1.0, 0.01), "star_density": (0.0, 0.3, 0.005),
-    "blur": (0.02, 1.0, 0.01), "intensity": (0.0, 3.0, 0.01), "gloss": (0.0, 2.0, 0.01),
+    "blur": (0.02, 1.0, 0.01),
+    "iterations": (4, 400, 1), "radius": (0.5, 1.0, 0.0005), "symmetry": (0, 12, 1), "p": (3, 12, 1),
+    "q": (3, 12, 1), "drift": (0.0, 0.7, 0.005), "fill": (0.0, 2.0, 0.01), "steps": (20, 200, 1),
+    "waves": (3, 21, 1), "sharpness": (0.0, 1.0, 0.01), "morph": (0.0, 0.3, 0.005), "intensity": (0.0, 3.0, 0.01), "gloss": (0.0, 2.0, 0.01),
 }
 
 # Campos de las secciones globales: (clave, etiqueta, min, max, paso).

@@ -1,0 +1,53 @@
+{
+  "output": {
+    "path": "renders/julia_mandala.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "palette": {
+    "preset": "acid",
+    "intensity": 1.1
+  },
+  "animation": {
+    "bpm": 128,
+    "bars": 16,
+    "speed": 0.0667,
+    "rotation": -0.0333,
+    "wobble": 0.0333,
+    "hue_cycles": 0.0333,
+    "pulse_strength": 0.6,
+    "pulse_decay": 4.5
+  },
+  "layers": [
+    {
+      "pattern": "julia_bloom",
+      "params": {
+        "iterations": 140,
+        "radius": 0.74,
+        "zoom": 0.9,
+        "symmetry": 8,
+        "glow": 1.2,
+        "flow": 3
+      }
+    }
+  ],
+  "post": {
+    "exposure": 1.05,
+    "bloom": 0.8,
+    "bloom_radius": 1.2,
+    "vignette": 0.4,
+    "grain": 0.012,
+    "chromatic_aberration": 0.002,
+    "saturation": 1.1,
+    "contrast": 1.05
+  }
+}

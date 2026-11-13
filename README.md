@@ -181,6 +181,11 @@ final, aplica tonemap y entrega RGB24 a ffmpeg.
 | `starfield` | Hiperespacio: capas de estrellas con estelas warp | `layers`, `density`, `streak`, `twinkle` |
 | `organic_waves` | Curvas de nivel de neón sobre ruido con distorsión de dominio | `bands`, `warp`, `scale`, `horizon` (>0 = suelo synthwave) |
 | `aurora_lake` · `deep_sea` · `lava_lounge` · `rainy_city` · `zen_pond` · `desert_dusk` · `firefly_forest` | Escenas chill (ver tabla de configs) | ver `vj/patterns.py` |
+| `julia_bloom` | Conjunto de Julia cuyo parámetro c recorre un círculo: el fractal muta sin parar y vuelve a su forma | `iterations`, `radius` (0.70–0.80), `symmetry` (espejos mandala), `flow` |
+| `hyperbolic` | Mosaico hiperbólico {p,q} en el disco de Poincaré (tipo *Circle Limit* de Escher) con paseo de Möbius | `p`, `q` (1/p+1/q<½), `scale` (>0.9 llena la pantalla), `drift` |
+| `gyroid` | Vuelo por raymarching a través de un giroide (superficie mínima) con venas de neón | `scale`, `thickness`, `steps`, `tunnel`, `fog` |
+| `quasicrystal` | Interferencia de N ondas planas: orden sin repetición, flores y estrellas que respiran | `waves` (impar), `frequency`, `sharpness`, `bands` |
+| `apollonian` | Encaje apoloniano: círculos dentro de círculos por inversión, que respira y se desplaza | `zoom`, `iterations`, `morph`, `line_width` |
 
 **Añadir un patrón**: crea `vj/shaders/<nombre>.frag` con `#include "common.glsl"`,
 usa `u_phase` y los contadores enteros, y regístralo en `PATTERNS` con sus
@@ -206,6 +211,22 @@ rechaza; `glslangValidator` detecta estos casos.
 | `zen_pond` | Estanque zen | Ondas de gotas sombreadas con normales, hojas de loto, una flor, reflejo de luna |
 | `desert_dusk` | Atardecer en el desierto | Dunas en paralaje con sombreado por pendiente, sol, nubes finas, pájaros |
 | `firefly_forest` | Bosque de luciérnagas | Troncos en capas, niebla a la deriva, luciérnagas que vagan y parpadean, hierba |
+
+- `configs/exotic/*.json`: geometría matemática imposible, loops de ~16 compases en HEVC 4K60
+  (vista previa en `configs/exotic/preview.jpg`):
+
+| Config | Patrón | Estilo |
+|---|---|---|
+| `julia_bloom` | fractal de Julia + polvo de estrellas | magenta → verde agua → fuego (cambio de paleta) |
+| `julia_mandala` | Julia con 8 espejos | mandala ácido |
+| `escher_infinity` | mosaico hiperbólico {7,3} a pantalla completa | synthwave |
+| `hyperbolic_bloom` | disco de Poincaré {5,4} flotando en estrellas | vitral cálido |
+| `gyroid_cathedral` | vuelo por el giroide | cueva de neón azul/magenta |
+| `quasicrystal_dream` | cuasicristal de 7 ondas | atardecer → hielo |
+| `apollonian_temple` | encaje apoloniano + esfera de partículas | oro / magenta |
+
+Los fractales y el raymarching son caóticos: un error de 1e-6 en la fase cambia
+píxeles enteros. Por eso usan `cyc(K)` (= `TAU·fract(K·fase)`), exacto en el cierre.
 
 - `configs/showcase/*.json`: composiciones de 3 capas listas para festival:
 

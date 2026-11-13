@@ -1,0 +1,97 @@
+{
+  "output": {
+    "path": "renders/julia_bloom.mp4",
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "codec": "hevc",
+    "quality": "high",
+    "hardware": "auto",
+    "supersample": 2,
+    "motion_blur": {
+      "samples": 2,
+      "shutter": 0.5
+    }
+  },
+  "palette": {
+    "colors": [
+      "#ff2bd6",
+      "#7b2cff",
+      "#00e5ff",
+      "#ffb000"
+    ],
+    "background": "#030008",
+    "intensity": 1.15,
+    "cycle": {
+      "palettes": [
+        {
+          "colors": [
+            "#00ffa3",
+            "#00b3ff",
+            "#e0ff4f",
+            "#004cff"
+          ],
+          "background": "#00060a"
+        },
+        {
+          "colors": [
+            "#ff5e00",
+            "#ff006e",
+            "#ffd000",
+            "#8f00ff"
+          ],
+          "background": "#0a0004"
+        }
+      ],
+      "repeats": 1,
+      "transition": 0.35
+    }
+  },
+  "animation": {
+    "bpm": 120,
+    "bars": 16,
+    "speed": 0.0625,
+    "rotation": 0.0156,
+    "wobble": 0.0313,
+    "hue_cycles": 0,
+    "pulse_strength": 0.5,
+    "pulse_decay": 5.0
+  },
+  "layers": [
+    {
+      "pattern": "julia_bloom",
+      "params": {
+        "iterations": 180,
+        "radius": 0.7885,
+        "zoom": 1.05,
+        "symmetry": 0,
+        "glow": 1.0,
+        "flow": 2
+      }
+    },
+    {
+      "pattern": "starfield",
+      "opacity": 0.35,
+      "params": {
+        "layers": 10,
+        "density": 0.06,
+        "size": 0.015,
+        "streak": 1.0
+      },
+      "animation": {
+        "speed": 0.25,
+        "rotation": 0
+      }
+    }
+  ],
+  "post": {
+    "exposure": 1.05,
+    "bloom": 0.7,
+    "bloom_radius": 1.2,
+    "vignette": 0.4,
+    "grain": 0.012,
+    "chromatic_aberration": 0.0015,
+    "saturation": 1.1,
+    "contrast": 1.05
+  }
+}

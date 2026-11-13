@@ -132,6 +132,60 @@ PATTERNS: dict[str, dict] = {
             "trees": 0.55,         # densidad de troncos
         },
     },
+    # ---- Exóticos: geometría matemática imposible ----
+    "julia_bloom": {
+        "shader": "julia_bloom.frag",
+        "params": {
+            "iterations": 160,     # detalle del fractal (coste ∝ iterations)
+            "radius": 0.7885,      # |c| del conjunto de Julia (0.70–0.80 = formas ricas)
+            "zoom": 1.0,
+            "symmetry": 0,         # 0 = natural · 2..12 = espejos tipo mandala
+            "glow": 1.0,
+            "flow": 1.0,           # flujo del color (× velocidad)
+        },
+    },
+    "hyperbolic": {
+        "shader": "hyperbolic.frag",
+        "params": {
+            "p": 7,                # lados de cada tesela
+            "q": 3,                # teselas por vértice (1/p + 1/q < 1/2)
+            "scale": 0.62,         # radio del disco (0.5 = cabe en altura; >0.9 llena la pantalla)
+            "drift": 0.35,         # paseo hiperbólico (0 = solo gira)
+            "line_width": 0.012,
+            "fill": 1.0,
+        },
+    },
+    "gyroid": {
+        "shader": "gyroid.frag",
+        "params": {
+            "scale": 3.0,          # densidad de la estructura
+            "thickness": 0.03,
+            "steps": 90,           # pasos de raymarching (coste ∝ steps)
+            "tunnel": 0.16,        # radio del pasillo libre de la cámara
+            "glow": 1.0,
+            "fog": 2.0,
+        },
+    },
+    "quasicrystal": {
+        "shader": "quasicrystal.frag",
+        "params": {
+            "waves": 7,            # ondas planas (5, 7, 9... impar = cuasiperiódico)
+            "frequency": 6.0,
+            "sharpness": 0.6,
+            "warp": 0.6,
+            "bands": 6,
+        },
+    },
+    "apollonian": {
+        "shader": "apollonian.frag",
+        "params": {
+            "zoom": 1.0,
+            "iterations": 8,
+            "morph": 0.12,         # respiración del fractal
+            "line_width": 0.0012,
+            "glow": 1.0,
+        },
+    },
 }
 
 
