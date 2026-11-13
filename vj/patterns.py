@@ -197,3 +197,33 @@ def resolve_pattern(gcfg: dict) -> tuple[dict, dict]:
     spec = PATTERNS[name]
     params = {**spec["params"], **(gcfg.get("params") or {})}
     return spec, params
+
+
+def resolve_modulation(spec: dict, params: dict) -> list[tuple]:
+    """`modulate`: {"<param>" | "opacity": {"amount": a, "cycles": n, "offset": 0..1}}.
+
+    valor(fase) = base + a·sin(2π·(n·fase + offset)) con n entero ≥ 1 → el loop cierra.
+    Sirve para que una escena evolucione durante todo el loop en vez de repetirse
+    cada pocos segundos (p. ej. un loop de 5 min con `cycles: 1`).
+    """
+    out = []
+    mod = spec.get("modulate") or {}
+    if not isinstance(mod, dict):
+        raise ValueError("modulate debe ser un objeto {parámetro: {amount, cycles}}")
+    for key, m in mod.items():
+        if key != "opacity" and key not in params:
+            raise ValueError(f"modulate: el patrón {spec['pattern']!r} no tiene el parámetro {key!r}")
+        if not isinstance(m, dict):
+            raise ValueError(f"modulate.{key} debe ser un objeto {{amount, cycles}}")
+        cycles = m.get("cycles", 1)
+        if isinstance(cycles, bool) or not isinstance(cycles, int) or cycles < 1:
+            raise ValueError(f"modulate.{key}.cycles debe ser un entero >= 1 (ciclos por loop)")
+        try:
+            amount, offset = float(m.get("amount", 0.0)), float(m.get("offset", 0.0))
+        except (TypeError, ValueError):
+            raise ValueError(f"modulate.{key}: amount y offset deben ser números") from None
+        if amount == 0.0:
+            continue
+        base = float(spec.get("opacity", 1.0)) if key == "opacity" else float(params[key])
+        out.append((key, base, amount, cycles, offset))
+    return out

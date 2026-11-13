@@ -33,7 +33,7 @@ from ..encoder import CONTAINER
 from ..loop import plan_loop
 from . import generator, schema
 from .auth import COOKIE, LOCAL, SESSION_DAYS, Auth, AuthError, Limits, User
-from .worker import CODE_ROOT, PreviewEngine, RenderQueue, probe_duration, video_thumbnail
+from .worker import CODE_ROOT, PreviewEngine, RenderQueue, long_name, probe_duration, video_thumbnail
 
 STATIC = Path(__file__).resolve().parent / "static"
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm"}
@@ -49,8 +49,20 @@ def inside(path: Path, base: Path) -> bool:
         return False
 
 
+def safe_audio_name(s: str) -> str:
+    p = Path(s.replace("\\", "/")).name
+    ext = Path(p).suffix.lower()
+    if ext not in AUDIO_EXT:
+        raise HTTPError(400, f"formato de audio no admitido; usa {', '.join(sorted(AUDIO_EXT))}")
+    return safe_name(Path(p).stem, "audio") + ext
+
+
 def safe_name(s: str, fallback: str = "loop") -> str:
     return SAFE_NAME.sub("_", s).strip("_")[:60] or fallback
+
+
+AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".aif", ".aiff"}
+MAX_AUDIO = 400 * 1024 * 1024
 
 
 class HTTPError(Exception):
@@ -72,9 +84,16 @@ class Workspace:
         self.configs = self.root / "configs"
         self.renders = self.root / "renders"
         self.studio = self.root / ".studio"
-        if not self.configs.exists() and (CODE_ROOT / "configs").exists() and self.root != CODE_ROOT:
-            shutil.copytree(CODE_ROOT / "configs", self.configs)
-        for d in (self.configs, self.renders, self.studio):
+        if (CODE_ROOT / "configs").exists() and self.root != CODE_ROOT:
+            # Siembra las escenas de ejemplo, y en arranques posteriores añade las que
+            # hayan llegado con una actualización (sin tocar las que ya existen).
+            for src in (CODE_ROOT / "configs").rglob("*"):
+                dst = self.configs / src.relative_to(CODE_ROOT / "configs")
+                if src.is_file() and not dst.exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+        self.audio = self.root / "audio"
+        for d in (self.configs, self.renders, self.studio, self.audio):
             d.mkdir(parents=True, exist_ok=True)
 
     # ---- permisos
@@ -93,6 +112,16 @@ class Workspace:
 
     def can_write_config(self, user: User, p: Path) -> bool:
         return inside(p, self.configs) if user.admin else inside(p, self.user_configs(user))
+
+    def user_audio(self, user: User) -> Path:
+        return self.audio if user.admin else self.audio / user.name
+
+    def list_audio(self, user: User) -> list[dict]:
+        base = self.user_audio(user)
+        if not base.exists():
+            return []
+        return [{"name": str(p.relative_to(base)), "size": p.stat().st_size}
+                for p in sorted(base.rglob("*")) if p.is_file() and p.suffix.lower() in AUDIO_EXT]
 
     def can_touch_render(self, user: User, p: Path) -> bool:
         return inside(p, self.user_renders(user)) and not inside(p, self.studio)
@@ -273,6 +302,49 @@ class Handler(BaseHTTPRequestHandler):
             raise HTTPError(404, "vídeo no encontrado")
         return p
 
+    def _resolve_audio(self, user: User, name) -> Path | None:
+        if not name:
+            return None
+        p = self.app.ws.user_audio(user) / str(name)
+        if not inside(p, self.app.ws.user_audio(user)) or not p.is_file() or p.suffix.lower() not in AUDIO_EXT:
+            raise HTTPError(404, "audio no encontrado")
+        return p
+
+    def _extend_minutes(self, user: User, value) -> float | None:
+        if value in (None, "", 0):
+            return None
+        minutes = float(value)
+        top = 600 if user.admin else self.app.limits.max_extend_minutes
+        if not 1 <= minutes <= top:
+            raise HTTPError(400, f"la duración debe estar entre 1 y {top} minutos")
+        return minutes
+
+    def _audio_upload(self) -> None:
+        user = self._need_user()
+        name = safe_audio_name(unquote(self.headers.get("X-Filename") or ""))
+        n = int(self.headers.get("Content-Length") or 0)
+        top = MAX_AUDIO if user.admin else MAX_AUDIO // 8
+        if not 0 < n <= top:
+            raise HTTPError(413, f"el audio debe pesar menos de {top // (1024 * 1024)} MB")
+        dest = self.app.ws.user_audio(user) / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(dest.name + ".part")
+        try:
+            with tmp.open("wb") as f:
+                left = n
+                while left > 0:
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk:
+                        raise HTTPError(400, "subida incompleta")
+                    f.write(chunk)
+                    left -= len(chunk)
+            if not probe_duration(tmp):
+                raise HTTPError(400, "ese archivo no parece audio válido")
+            tmp.replace(dest)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return self._json({"name": name})
+
     def _resolve_config(self, user: User, rel: str) -> Path:
         p = self.app.ws.configs / rel
         if not self.app.ws.can_read_config(user, p) or not p.is_file():
@@ -286,7 +358,10 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         try:
             if method == "POST":
-                if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+                ctype = self.headers.get("Content-Type") or ""
+                if url.path == "/api/audio-upload" and ctype == "application/octet-stream":
+                    return self._audio_upload()   # tampoco es un tipo que un formulario pueda enviar
+                if not ctype.startswith("application/json"):
                     raise HTTPError(415, "se esperaba application/json")   # bloquea CSRF con formularios
                 return self._post(url)
             return self._get(url)
@@ -338,6 +413,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(json.loads(self._resolve_config(user, q["path"]).read_text(encoding="utf-8")))
         if path == "/api/jobs":
             return self._json([self._job_dict(j, user) for j in app.queue.visible(user)])
+        if path == "/api/audio":
+            return self._json(ws.list_audio(user))
         if path == "/api/renders":
             return self._json(ws.list_renders(user, app.queue))
         if path == "/api/render-config":
@@ -494,6 +571,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._render(user, body)
         if path == "/api/extend":
             return self._extend(user, body)
+        if path == "/api/render-batch":
+            return self._render_batch(user, body)
+        if path == "/api/delete-audio":
+            self._resolve_audio(user, body["name"]).unlink()
+            return self._json({"ok": True})
         if path == "/api/cancel":
             job = self._own_job(user, body)
             app.queue.cancel(job)
@@ -522,6 +604,7 @@ class Handler(BaseHTTPRequestHandler):
         """Añade la ruta para la galería (relativa a renders/) si el vídeo ya existe.
         A los invitados no se les muestran rutas del disco del servidor."""
         d = job.to_dict()
+        d["audio"] = Path(d["audio"]).name if d.get("audio") else None
         renders = self.app.ws.renders
         rel = str(job.output.resolve().relative_to(renders.resolve())) if inside(job.output, renders) else None
         d["media"] = rel if job.state == "listo" and rel and job.output.exists() else None
@@ -568,24 +651,50 @@ class Handler(BaseHTTPRequestHandler):
         out = self._output_path(user, str(body.get("output", "")), cfg["output"]["codec"])
         if app.queue.busy(out):
             raise HTTPError(409, "ya hay un trabajo escribiendo ese archivo")
-        job = app.queue.submit(body["config"], out, safe_name(str(body.get("name", "render")), "render"), user.name)
+        job = app.queue.submit(body["config"], out, safe_name(str(body.get("name", "render")), "render"), user.name,
+                               self._extend_minutes(user, body.get("extend_minutes")),
+                               self._resolve_audio(user, body.get("audio")))
         return self._json(self._job_dict(job, user))
+
+    def _render_batch(self, user: User, body: dict) -> None:
+        """Encola varias escenas guardadas de una vez (cada una con su propia salida)."""
+        app = self.app
+        paths = body["paths"]
+        if not isinstance(paths, list) or not 1 <= len(paths) <= 40:
+            raise HTTPError(400, "elige entre 1 y 40 escenas")
+        if not user.admin and app.queue.active_count(user.name) + len(paths) > app.limits.max_jobs:
+            raise HTTPError(429, f"como máximo {app.limits.max_jobs} renders en cola a la vez")
+        minutes = self._extend_minutes(user, body.get("extend_minutes"))
+        audio = self._resolve_audio(user, body.get("audio"))
+        todo = []
+        for rel in paths:                      # validar todo antes de encolar nada
+            raw = json.loads(self._resolve_config(user, str(rel)).read_text(encoding="utf-8"))
+            if isinstance(body.get("output"), dict):
+                raw["output"] = {**raw.get("output", {}), **body["output"]}
+            cfg = app.checked(user, raw)
+            name = Path(str(rel)).stem
+            out = self._output_path(user, name if not user.admin else f"renders/{name}", cfg["output"]["codec"])
+            if app.queue.busy(out):
+                raise HTTPError(409, f"ya hay un trabajo escribiendo {out.name}")
+            todo.append((raw, out, name))
+        jobs = [app.queue.submit(raw, out, safe_name(name, "render"), user.name, minutes, audio)
+                for raw, out, name in todo]
+        return self._json([self._job_dict(j, user) for j in jobs])
 
     def _extend(self, user: User, body: dict) -> None:
         app = self.app
         src = self._resolve_render(user, body["path"])
-        minutes = float(body["minutes"])
-        top = 600 if user.admin else app.limits.max_extend_minutes
-        if not 1 <= minutes <= top:
-            raise HTTPError(400, f"la duración debe estar entre 1 y {top} minutos")
+        minutes = self._extend_minutes(user, body["minutes"])
+        if not minutes:
+            raise HTTPError(400, "indica la duración en minutos")
         if not user.admin and app.queue.active_count(user.name, "extend") >= 1:
             raise HTTPError(429, "ya tienes una versión larga en curso")
-        tag = f"{minutes:g}min".replace(".", "_")
-        out = src.with_name(f"{src.stem}_{tag}{src.suffix}")
+        out = long_name(src, minutes)
         if app.queue.busy(out):
             raise HTTPError(409, "ya se está generando esa versión")
         origin = app.queue.job_for_output(src)
-        job = app.queue.extend(src, out, minutes, user.name, origin.cfg if origin else None)
+        job = app.queue.extend(src, out, minutes, user.name, origin.cfg if origin else None,
+                               self._resolve_audio(user, body.get("audio")))
         return self._json(self._job_dict(job, user))
 
     def _variations(self, user: User, body: dict) -> None:

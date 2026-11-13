@@ -19,7 +19,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento: no pasa nada */ } },
 };
 const encPath = (p) => p.split("/").map(encodeURIComponent).join("/");
-const BUILTIN_GROUPS = ["básicas", "chill", "showcase"];
+const BUILTIN_GROUPS = ["básicas", "chill", "showcase", "exotic"];
 
 const state = {
   me: null, meta: null, configs: [], path: null, saved: null, cfg: null, tab: "scene", view: "editor",
@@ -526,13 +526,48 @@ function patternParams(holder, pattern) {
   if (!spec) return el("p", { class: "hint" }, `Patrón desconocido: ${pattern}`);
   holder.params ??= {};
   for (const [k, m] of Object.entries(spec.params)) {
-    box.append(slider(k.replaceAll("_", " "), {
+    const field = slider(k.replaceAll("_", " "), {
       get: () => holder.params[k] ?? m.default,
       set: (v) => { if (v === m.default) delete holder.params[k]; else holder.params[k] = v; },
       min: m.min, max: m.max, step: m.step, int: m.int, dflt: m.default,
-    }));
+    });
+    box.append(field);
+    if (!m.int) attachMod(field, holder, k, (m.max - m.min) / 2, m.step);
   }
   return box;
+}
+
+// Modulación (LFO): el parámetro oscila un número entero de veces por loop, así
+// la escena evoluciona durante todo el loop sin romper el cierre.
+function attachMod(field, holder, key, maxAmount, step) {
+  const on = () => !!holder.modulate?.[key];
+  const btn = el("button", { class: "small ghost mod-btn", title: "Evolución: hace que este valor oscile durante el loop" }, "∿");
+  const box = el("div", { class: "mod-box" });
+  const draw = () => {
+    btn.classList.toggle("on", on());
+    box.replaceChildren();
+    if (!on()) return;
+    const m = holder.modulate[key];
+    box.append(
+      slider("∿ amplitud (±)", { get: () => m.amount ?? 0, set: (v) => { m.amount = v; },
+                                 min: 0, max: maxAmount, step }),
+      slider("∿ ciclos por loop", { get: () => m.cycles ?? 1, set: (v) => { m.cycles = v; },
+                                    min: 1, max: 16, step: 1, int: true }),
+      slider("∿ desfase", { get: () => m.offset ?? 0, set: (v) => { m.offset = v; }, min: 0, max: 1, step: 0.01 }));
+  };
+  btn.addEventListener("click", () => {
+    if (on()) {
+      delete holder.modulate[key];
+      if (!Object.keys(holder.modulate).length) delete holder.modulate;
+    } else {
+      (holder.modulate ??= {})[key] = { amount: Number((maxAmount / 4).toPrecision(2)), cycles: 1 };
+    }
+    draw();
+    changed();
+  });
+  field.querySelector("label").append(btn);
+  field.after(box);
+  draw();
 }
 
 const patternOptions = () => Object.keys(state.meta.patterns).map((p) => [p, p.replaceAll("_", " ")]);
@@ -545,11 +580,11 @@ function tabScene(panel) {
     panel.append(
       el("p", { class: "hint" }, "Un solo patrón. Añade capas para mezclar varios (se suman como luz)."),
       select("Patrón", patternOptions(), {
-        get: () => g.pattern, set: (v) => { g.pattern = v; g.params = {}; }, rerender: true,
+        get: () => g.pattern, set: (v) => { g.pattern = v; g.params = {}; delete g.modulate; }, rerender: true,
       }),
       patternParams(g, g.pattern),
       el("button", { onclick: () => {
-        cfg.layers = [{ pattern: g.pattern, params: g.params || {} },
+        cfg.layers = [{ pattern: g.pattern, params: g.params || {}, ...(g.modulate ? { modulate: g.modulate } : {}) },
                       { pattern: "starfield", opacity: 0.6, params: {} }];
         delete cfg.geometry;
         changed({ rerender: true });
@@ -570,6 +605,9 @@ function tabScene(panel) {
       if (cfg.layers.length === 1) {               // una sola capa → vuelve a modo patrón
         const only = cfg.layers[0];
         cfg.geometry = { pattern: only.pattern, params: only.params || {} };
+        const mod = { ...(only.modulate || {}) };
+        delete mod.opacity;
+        if (Object.keys(mod).length) cfg.geometry.modulate = mod;
         delete cfg.layers;
       }
       changed({ rerender: true });
@@ -585,6 +623,9 @@ function tabScene(panel) {
         changed();
       } catch { adv.style.borderColor = "var(--bad)"; }
     });
+    const opacity = el("div", {}, slider("opacidad", { get: () => layer.opacity ?? 1, set: (v) => { layer.opacity = v; },
+                                                       min: 0, max: 1, step: 0.01, dflt: 1 }));
+    attachMod(opacity.firstChild, layer, "opacity", 0.5, 0.01);
     panel.append(el("div", { class: "card" },
       el("div", { class: "card-head" }, el("h4", {}, `Capa ${i + 1}`),
         el("button", { class: "small ghost", title: "Subir", onclick: () => move(-1) }, "↑"),
@@ -592,10 +633,12 @@ function tabScene(panel) {
         el("button", { class: "small ghost", title: "Duplicar", onclick: duplicate }, "⧉"),
         el("button", { class: "small ghost danger", title: "Quitar", onclick: remove }, "✕")),
       select("Patrón", patternOptions(), {
-        get: () => layer.pattern, set: (v) => { layer.pattern = v; layer.params = {}; }, rerender: true,
+        get: () => layer.pattern, set: (v) => {
+          layer.pattern = v; layer.params = {};
+          if (layer.modulate) { const o = layer.modulate.opacity; layer.modulate = o ? { opacity: o } : undefined; if (!o) delete layer.modulate; }
+        }, rerender: true,
       }),
-      slider("opacidad", { get: () => layer.opacity ?? 1, set: (v) => { layer.opacity = v; },
-                           min: 0, max: 1, step: 0.01, dflt: 1 }),
+      opacity,
       el("details", {}, el("summary", {}, "Parámetros del patrón"), patternParams(layer, layer.pattern)),
       el("details", {}, el("summary", {}, "Paleta / animación propias (JSON)"), adv,
         el("p", { class: "hint" }, 'Ej.: {"animation": {"speed": 0.5, "beat_multiplier": 2}, "palette": {"preset": "ice"}}')),
@@ -948,8 +991,10 @@ async function startRender() {
   btn.disabled = true;
   try {
     if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
-    await api("/api/render", { config: state.cfg, output: $("#out-path").value, name: sceneName() });
-    toast("Render en cola", "ok", null, 2000);
+    const then = Number($("#render-then").value) || null;
+    await api("/api/render", { config: state.cfg, output: $("#out-path").value, name: sceneName(),
+                               extend_minutes: then, audio: then ? $("#render-audio").value || null : null });
+    toast(then ? "Render en cola; la versión larga se creará al terminar" : "Render en cola", "ok", null, 2500);
     pollJobs(true);
   } catch (e) { toast("No se pudo iniciar el render: " + e.message, "bad", null, 8000); }
   finally { btn.disabled = false; }
@@ -1033,7 +1078,10 @@ function jobRow(j) {
   return el("div", { class: "job" },
     el("div", { class: "job-head" }, el("span", { class: "name" }, (j.kind === "extend" ? "⟳ " : "") + j.name),
       isAdmin() && state.me.shared && j.owner !== "local" ? el("span", { class: "badge" }, j.owner) : null,
-      el("span", { class: "badge " + j.state }, j.state), el("span", { class: "actions-inline" }, ...actions)),
+      el("span", { class: "badge " + j.state }, j.state),
+      j.kind === "render" && j.then_minutes ? el("span", { class: "badge", title: "Al terminar se crea la versión larga" },
+        `+ ${j.then_minutes >= 60 ? j.then_minutes / 60 + " h" : j.then_minutes + " min"}${j.audio ? " ♪" : ""}`) : null,
+      el("span", { class: "actions-inline" }, ...actions)),
     el("div", { class: "bar" }, el("div", { style: `width:${pct.toFixed(1)}%` })),
     el("div", { class: "job-meta" },
       el("span", {}, progress),
@@ -1238,6 +1286,232 @@ function openShare() {
 }
 
 // ------------------------------------------------------------------ arranque
+// ------------------------------------------------------------------ audio, lote y versión larga encadenada
+const THEN_OPTIONS = [["", "solo el loop"], ["10", "+ versión de 10 min"], ["30", "+ versión de 30 min"],
+                      ["60", "+ versión de 1 hora"], ["120", "+ versión de 2 horas"], ["180", "+ versión de 3 horas"]];
+
+async function loadAudio() {
+  try { state.audio = await api("/api/audio"); } catch { state.audio = []; }
+  for (const sel of document.querySelectorAll(".audio-select")) {
+    const cur = sel.value;
+    sel.replaceChildren(el("option", { value: "" }, "sin audio"),
+      ...state.audio.map((a) => el("option", { value: a.name }, `${a.name} (${fmtSize(a.size)})`)));
+    if (state.audio.some((a) => a.name === cur)) sel.value = cur;
+  }
+}
+
+async function uploadAudio(file) {
+  if (!file) return;
+  toast(`Subiendo ${file.name}…`, "", null, 3000);
+  try {
+    const res = await fetch("/api/audio-upload", { method: "POST", body: file,
+      headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    await loadAudio();
+    for (const sel of document.querySelectorAll(".audio-select")) sel.value = data.name;
+    toast("Audio listo: " + data.name, "ok");
+  } catch (e) { toast("No se pudo subir el audio: " + e.message, "bad", null, 8000); }
+}
+
+function openBatch() {
+  const list = $("#batch-list");
+  list.replaceChildren();
+  const groups = {};
+  for (const c of state.configs) (groups[c.group] ??= []).push(c);
+  const count = () => {
+    const n = list.querySelectorAll("input[data-path]:checked").length;
+    $("#batch-count").textContent = n ? `${n} escena${n > 1 ? "s" : ""}` : "nada marcado";
+    $("#batch-go").disabled = !n;
+  };
+  for (const [g, items] of Object.entries(groups)) {
+    const all = el("input", { type: "checkbox", title: "Marcar todo el grupo" });
+    const boxes = items.map((c) => el("input", { type: "checkbox", "data-path": c.path }));
+    all.addEventListener("change", () => { for (const b of boxes) b.checked = all.checked; count(); });
+    list.append(el("h5", {}, all, g), ...items.map((c, i) => el("label", {}, boxes[i], c.name.replaceAll("_", " "))));
+  }
+  list.onchange = count;
+  $("#batch-preset").replaceChildren(el("option", { value: "" }, "el de cada escena"),
+    ...state.meta.export_presets.map((ex, i) => el("option", { value: i }, ex.label)));
+  $("#batch-then").replaceChildren(...THEN_OPTIONS.map(([v, t]) => el("option", { value: v }, t)));
+  $("#batch-then").value = $("#render-then").value;
+  $("#batch-audio").value = $("#render-audio").value;
+  count();
+  $("#dlg-batch").showModal();
+}
+
+async function startBatch() {
+  const paths = [...document.querySelectorAll("#batch-list input[data-path]:checked")].map((b) => b.dataset.path);
+  const preset = $("#batch-preset").value;
+  const body = { paths, extend_minutes: Number($("#batch-then").value) || null, audio: $("#batch-audio").value || null };
+  if (preset !== "") {
+    const o = clone(state.meta.export_presets[Number(preset)].output);
+    o.motion_blur ??= { samples: 1, shutter: 0.5 };
+    body.output = o;
+  }
+  $("#batch-go").disabled = true;
+  try {
+    const jobs = await api("/api/render-batch", body);
+    $("#dlg-batch").close();
+    toast(`${jobs.length} render${jobs.length > 1 ? "s" : ""} en cola`, "ok");
+    pollJobs(true);
+  } catch (e) { toast(e.message, "bad", null, 8000); }
+  finally { $("#batch-go").disabled = false; }
+}
+
+// ------------------------------------------------------------------ kit de YouTube
+const PATTERN_COPY = {
+  kaleidoscope: ["an infinite kaleidoscope zoom of neon geometry", ["kaleidoscope", "mandala"]],
+  hex_tunnel: ["an endless neon tunnel flight", ["tunnel", "cyberpunk"]],
+  particle_sphere: ["a breathing sphere of glowing particles", ["particles"]],
+  starfield: ["a warp-speed flight through the stars", ["space", "starfield"]],
+  organic_waves: ["flowing liquid neon contour waves", ["liquid", "waves"]],
+  julia_bloom: ["an ever-morphing Julia set fractal", ["fractal", "juliaset"]],
+  hyperbolic: ["an Escher-like hyperbolic tiling drifting to infinity", ["hyperbolic", "escher", "sacredgeometry"]],
+  gyroid: ["a flight through a glowing gyroid cathedral", ["3d", "gyroid"]],
+  quasicrystal: ["a breathing quasicrystal of interfering waves", ["quasicrystal", "sacredgeometry"]],
+  apollonian: ["an Apollonian lace of circles within circles", ["fractal", "apollonian"]],
+  aurora_lake: ["northern lights over a still arctic lake", ["aurora", "ambient"]],
+  deep_sea: ["light rays and drifting bubbles in the deep sea", ["underwater", "ambient"]],
+  lava_lounge: ["a slow, glossy lava lamp", ["lavalamp", "ambient"]],
+  rainy_city: ["city lights behind a rainy window", ["rain", "bokeh", "ambient"]],
+  zen_pond: ["raindrops rippling on a zen pond", ["zen", "ambient"]],
+  desert_dusk: ["a desert sunset over rolling dunes", ["sunset", "ambient"]],
+  firefly_forest: ["fireflies drifting through a misty forest", ["fireflies", "ambient"]],
+};
+const kit = { cfg: null, name: "", img: null, timer: null, abort: null };
+const titleCase = (s) => s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+const kitLayers = () => (kit.cfg.layers?.length ? kit.cfg.layers : [kit.cfg.geometry || {}]).map((l) => l.pattern).filter(Boolean);
+
+function openKit(cfg, name) {
+  kit.cfg = cfg;
+  kit.name = titleCase(name.replace(/_\d+(_\d+)?min$/, ""));
+  kit.img = null;
+  $("#kit-brand").value = store.get("vj.brand") || "Prism Loops";
+  $("#kit-headline").value = kit.name.toUpperCase();
+  kitBadge();
+  kitText();
+  $("#dlg-kit").showModal();
+  kitFrame();
+}
+
+function kitRes() {
+  const h = Math.min(get(kit.cfg, "output.width", 3840), get(kit.cfg, "output.height", 2160));
+  return h >= 2160 ? "4K" : h >= 1440 ? "1440p" : h >= 1080 ? "Full HD" : "HD";
+}
+
+function kitBadge() {
+  $("#kit-badge").value = `${$("#kit-length").value.toUpperCase()} · ${kitRes().toUpperCase()}`;
+}
+
+function kitText() {
+  const len = $("#kit-length").value, res = kitRes(), brand = $("#kit-brand").value.trim() || "Prism Loops";
+  const pats = kitLayers();
+  const copy = pats.map((p) => PATTERN_COPY[p]).filter(Boolean);
+  const chill = copy.some((c) => c[1].includes("ambient"));
+  const bpm = get(kit.cfg, "animation.bpm", 0), strength = get(kit.cfg, "animation.pulse_strength", 0);
+  const fps = get(kit.cfg, "output.fps", 60);
+  const use = chill ? "Focus, Relax & Sleep" : "Focus, Relax & VJ";
+  const title = `${kit.name} | ${len} Abstract ${res} Visuals – Seamless Loop for ${use}`;
+  const what = copy.length ? copy.map((c) => c[0]).join(", layered with ") : "abstract light, color and motion";
+  const tags = [...new Set(["abstract visuals", `${res.toLowerCase()} visuals`, "seamless loop", "vj loop", "visuals",
+    "screensaver", "ambient visuals", "background video", "focus", "relax", ...copy.flatMap((c) => c[1]),
+    ...(chill ? ["calm", "sleep"] : ["party visuals", "trippy", "psychedelic"]), kit.name.toLowerCase(), brand.toLowerCase()])];
+  const hash = [...new Set(["abstractvisuals", `${res.replace(/\s/g, "").toLowerCase()}visuals`, "seamlessloop", "vjloops",
+    ...copy.flatMap((c) => c[1])])].slice(0, 8).map((t) => "#" + t).join(" ");
+  $("#kit-title").value = title;
+  $("#kit-desc").value = [
+    `${kit.name} — ${len.toLowerCase()} of seamless abstract ${res} visuals: ${what}.`,
+    "",
+    chill ? "✦ Made for: focus and study sessions, relaxing, sleep, ambient screens and calm backgrounds."
+          : "✦ Made for: focus and study sessions, relaxing, ambient screens, parties, VJ sets and live visuals.",
+    `✦ ${res} · ${fps} fps · mathematically seamless loop — no cuts, no jumps` + (bpm && strength ? ` · pulse synced to ${bpm} BPM` : ""),
+    "✦ Put it on repeat for as long as you like.",
+    "",
+    `${brand} — abstract ${res} visuals & seamless loops. Light, color and motion, made for screens and sets.`,
+    "",
+    hash,
+  ].join("\n");
+  $("#kit-tags").value = tags.join(", ");
+  kitTitleLen();
+}
+
+function kitTitleLen() {
+  const n = $("#kit-title").value.length;
+  $("#kit-title-len").textContent = `${n}/100 caracteres` + (n > 100 ? " — YouTube lo cortará" : n > 70 ? " — en la búsqueda se ven ~70" : "");
+}
+
+async function kitFrame() {
+  kit.abort?.abort();
+  kit.abort = new AbortController();
+  try {
+    const blob = await api("/api/preview", { config: kit.cfg, phase: Number($("#kit-phase").value), width: 1280, hq: true },
+                           { signal: kit.abort.signal });
+    kit.img = await createImageBitmap(blob);
+    kitDraw();
+  } catch (e) { if (e.name !== "AbortError") toast("No se pudo generar el fotograma: " + e.message, "bad"); }
+}
+
+function kitDraw() {
+  const cv = $("#kit-canvas"), g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, W, H);
+  if (kit.img) {                                      // recorte tipo «cover»
+    const s = Math.max(W / kit.img.width, H / kit.img.height);
+    const w = kit.img.width * s, h = kit.img.height * s;
+    g.drawImage(kit.img, (W - w) / 2, (H - h) / 2, w, h);
+  }
+  const style = $("#kit-style").value;
+  const headline = $("#kit-headline").value.trim(), badge = $("#kit-badge").value.trim();
+  const font = (px, weight = 800) => `${weight} ${px}px "Helvetica Neue", "Segoe UI", Arial, sans-serif`;
+  if (style === "clean") return;
+  const pill = (text, x, y, px, align = "left") => {
+    if (!text) return 0;
+    g.font = font(px, 800);
+    const w = g.measureText(text).width + px * 1.3, h = px * 1.75;
+    const x0 = align === "center" ? x - w / 2 : x;
+    const grad = g.createLinearGradient(x0, 0, x0 + w, 0);
+    grad.addColorStop(0, "#7b2cff"); grad.addColorStop(0.55, "#ff2bd6"); grad.addColorStop(1, "#ffb000");
+    g.fillStyle = grad;
+    g.beginPath(); g.roundRect(x0, y, w, h, h / 2); g.fill();
+    g.fillStyle = "#fff"; g.textBaseline = "middle"; g.textAlign = "left";
+    g.fillText(text, x0 + px * 0.65, y + h / 2 + px * 0.04);
+    return h;
+  };
+  const fit = (text, maxW, px) => { g.font = font(px); while (g.measureText(text).width > maxW && px > 40) g.font = font(px -= 4); return px; };
+  if (style === "bottom") {
+    const sh = g.createLinearGradient(0, H * 0.42, 0, H);
+    sh.addColorStop(0, "rgba(0,0,0,0)"); sh.addColorStop(1, "rgba(0,0,0,.82)");
+    g.fillStyle = sh; g.fillRect(0, H * 0.42, W, H * 0.58);
+    const px = fit(headline, W - 140, 124);
+    g.textAlign = "left"; g.textBaseline = "alphabetic";
+    g.shadowColor = "rgba(0,0,0,.7)"; g.shadowBlur = 24;
+    g.fillStyle = "#fff"; g.fillText(headline, 70, H - 74);
+    g.shadowBlur = 0;
+    pill(badge, 70, H - 74 - px - 78, 34);
+  } else if (style === "center") {
+    const v = g.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.55);
+    v.addColorStop(0, "rgba(0,0,0,.62)"); v.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = v; g.fillRect(0, 0, W, H);
+    const px = fit(headline, W - 200, 140);
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.shadowColor = "rgba(0,0,0,.8)"; g.shadowBlur = 30;
+    g.fillStyle = "#fff"; g.fillText(headline, W / 2, H / 2 - 10);
+    g.shadowBlur = 0;
+    pill(badge, W / 2, H / 2 + px * 0.62, 34, "center");
+  } else {
+    pill(badge, 56, H - 56 - 64, 38);
+  }
+}
+
+function kitDownload() {
+  $("#kit-canvas").toBlob((blob) => {
+    const a = el("a", { href: URL.createObjectURL(blob), download: `${kit.name.toLowerCase().replace(/\s+/g, "_")}_thumbnail.jpg` });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, "image/jpeg", 0.92);
+}
+
 async function init() {
   $("#login-form").addEventListener("submit", doLogin);
   state.me = await api("/api/me");
@@ -1259,6 +1533,7 @@ async function init() {
   else newScene();
   pollJobs();
   loadRenders();
+  loadAudio();
 }
 
 function bindUi() {
@@ -1340,12 +1615,38 @@ function bindUi() {
   $("#btn-extend").addEventListener("click", async () => {
     const minutes = Number($("#extend-min").value);
     try {
-      await api("/api/extend", { path: playerItem.path, minutes });
+      await api("/api/extend", { path: playerItem.path, minutes, audio: $("#extend-audio").value || null });
       $("#dlg-player").close();
       toast(`Creando la versión de ${minutes >= 60 ? minutes / 60 + " h" : minutes + " min"}… aparecerá en la galería`, "ok");
       setView("editor");
       pollJobs(true);
     } catch (e) { toast(e.message, "bad"); }
+  });
+
+  $("#render-then").value = store.get("vj.then") || "";
+  $("#render-then").addEventListener("change", (e) => store.set("vj.then", e.target.value));
+  for (const b of document.querySelectorAll(".btn-audio-upload")) b.addEventListener("click", () => $("#audio-file").click());
+  $("#audio-file").addEventListener("change", (e) => { uploadAudio(e.target.files[0]); e.target.value = ""; });
+  $("#btn-batch").addEventListener("click", openBatch);
+  $("#batch-go").addEventListener("click", startBatch);
+  $("#btn-kit").addEventListener("click", () => openKit(clone(state.cfg), sceneName()));
+  $("#player-kit").addEventListener("click", async () => {
+    try {
+      const cfg = await api("/api/render-config?path=" + encodeURIComponent(playerItem.path));
+      $("#player").pause();
+      openKit(cfg, playerItem.name.replace(/\.[^.]+$/, ""));
+    } catch { toast("Este vídeo no guardó su escena: abre la escena en el editor y usa «Kit YouTube» ahí", "bad", null, 7000); }
+  });
+  $("#kit-phase").addEventListener("input", () => { clearTimeout(kit.timer); kit.timer = setTimeout(kitFrame, 200); });
+  for (const id of ["kit-style", "kit-headline", "kit-badge"]) $("#" + id).addEventListener("input", kitDraw);
+  $("#kit-length").addEventListener("change", () => { kitBadge(); kitText(); kitDraw(); });
+  $("#kit-brand").addEventListener("change", (e) => { store.set("vj.brand", e.target.value.trim()); kitText(); });
+  $("#kit-title").addEventListener("input", kitTitleLen);
+  $("#kit-download").addEventListener("click", kitDownload);
+  for (const b of document.querySelectorAll(".kit-copy")) b.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try { await navigator.clipboard.writeText($("#" + b.dataset.for).value); toast("Copiado", "ok", null, 1500); }
+    catch { $("#" + b.dataset.for).select(); toast("Selecciona y copia con ⌘C", "", null, 3000); }
   });
 
   document.addEventListener("keydown", onKey);

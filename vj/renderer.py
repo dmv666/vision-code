@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import math
 import struct
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ import moderngl
 from .config import layers_of
 from .loop import LoopPlan
 from .palette import layer_palette, resolve_color_cycle, resolve_palette
-from .patterns import resolve_pattern
+from .patterns import resolve_modulation, resolve_pattern
 
 SHADER_DIR = Path(__file__).parent / "shaders"
 
@@ -92,6 +93,10 @@ class Layer:
         palette = resolve_palette(pcfg)
         palette.update(u_colors_b=palette["u_colors"], u_num_colors_b=palette["u_num_colors"], u_palette_mix=0.0)
         self.cycle = resolve_color_cycle(pcfg)
+        # Modulación (LFO): parámetros que oscilan un número entero de veces por loop.
+        self.opacity = float(spec.get("opacity", 1.0))
+        self.blur_samples = blur_samples
+        self.mods = resolve_modulation(spec, params)
         self.own_background = index == 0
         if index > 0:
             palette["u_background"] = (0.0, 0.0, 0.0)  # el fondo lo pone solo la primera capa
@@ -109,6 +114,13 @@ class Layer:
 
     def draw(self, phase: float) -> None:
         values = {"u_phase": phase}
+        for key, base, amount, cycles, offset in self.mods:
+            # (cycles·fase) % 1 es exactamente 0 en fase 1: el cierre es bit a bit.
+            v = base + amount * math.sin(math.tau * (((cycles * phase) % 1.0) + offset))
+            if key == "opacity":
+                values["u_weight"] = max(0.0, v) ** 2.2 / self.blur_samples
+            else:
+                values[f"u_{key}"] = v
         if self.cycle:
             values.update(self.cycle.uniforms(phase))
             if not self.own_background:
@@ -172,8 +184,12 @@ class Renderer:
         self.out_fbo = self.ctx.simple_framebuffer((self.width, self.height), components=4)
         self.post_vao = self.ctx.vertex_array(self.post, [])
 
-    def render(self, frame: int, wrap: bool = True) -> bytes:
-        """Devuelve el frame como RGB24 (filas de abajo hacia arriba, convención GL)."""
+    def render(self, frame: int, wrap: bool = True, still: bool = False) -> bytes:
+        """Devuelve el frame como RGB24 (filas de abajo hacia arriba, convención GL).
+
+        still=True evalúa todos los sub-frames en el instante exacto del frame (sin
+        motion blur): lo usa la comprobación del loop para comparar fase 1.0 con 0.0.
+        """
         n = self.blur_samples
         self.accum_fbo.use()
         self.accum_fbo.clear(0.0, 0.0, 0.0, 0.0)
@@ -182,7 +198,7 @@ class Renderer:
         for j in range(n):
             # Sub-frames centrados en el frame. Como la fase se envuelve con %1,
             # el motion blur del último frame "ve" el inicio del loop: sin costura.
-            offset = ((j + 0.5) / n - 0.5) * self.shutter if n > 1 else 0.0
+            offset = ((j + 0.5) / n - 0.5) * self.shutter if n > 1 and not still else 0.0
             phase = self.plan.phase(frame + offset, wrap)
             for layer in self.layers:
                 layer.draw(phase)

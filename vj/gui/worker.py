@@ -292,11 +292,17 @@ def video_thumbnail(src: Path, dst: Path, width: int = 480) -> bool:
 ACTIVE = ("en cola", "renderizando", "cancelando")
 
 
+def long_name(src: Path, minutes: float) -> Path:
+    tag = f"{minutes:g}min".replace(".", "_")
+    return src.with_name(f"{src.stem}_{tag}{src.suffix}")
+
+
 class Job:
     _ids = itertools.count(1)
 
     def __init__(self, kind: str, name: str, owner: str, output: Path, cfg: dict | None = None,
-                 source: Path | None = None, minutes: float | None = None):
+                 source: Path | None = None, minutes: float | None = None,
+                 then_minutes: float | None = None, audio: Path | None = None):
         self.id = next(self._ids)
         self.kind = kind                  # "render" | "extend"
         self.name = name
@@ -305,6 +311,8 @@ class Job:
         self.output = output
         self.source = source
         self.minutes = minutes
+        self.then_minutes = then_minutes  # render: al terminar, crear versión larga de N minutos
+        self.audio = audio                # pista de audio para la versión larga
         self.state = "en cola"
         self.frame = 0
         self.total = 0
@@ -318,11 +326,12 @@ class Job:
         self.proc: subprocess.Popen | None = None
 
     FIELDS = ("id", "kind", "name", "owner", "state", "frame", "total", "fps", "eta", "encoder",
-              "created", "started", "finished", "minutes")
+              "created", "started", "finished", "minutes", "then_minutes")
 
     def to_dict(self, with_cfg: bool = False) -> dict:
         d = {k: getattr(self, k) for k in self.FIELDS} | {
-            "output": str(self.output), "source": str(self.source) if self.source else None, "log": self.log[-12:]}
+            "output": str(self.output), "source": str(self.source) if self.source else None, "log": self.log[-12:],
+            "audio": str(self.audio) if self.audio else None}
         if with_cfg:
             d["cfg"] = self.cfg
         return d
@@ -334,6 +343,7 @@ class Job:
             setattr(job, k, d.get(k))
         job.output = Path(d["output"])
         job.source = Path(d["source"]) if d.get("source") else None
+        job.audio = Path(d["audio"]) if d.get("audio") else None
         job.cfg = d.get("cfg")
         job.log = d.get("log", [])
         job.proc = None
@@ -406,12 +416,14 @@ class RenderQueue:
         self._queues[job.kind].put(job)
         return job
 
-    def submit(self, cfg: dict, output: Path, name: str, owner: str) -> Job:
-        return self._add(Job("render", name, owner, output, cfg=cfg))
+    def submit(self, cfg: dict, output: Path, name: str, owner: str, then_minutes: float | None = None,
+               audio: Path | None = None) -> Job:
+        return self._add(Job("render", name, owner, output, cfg=cfg, then_minutes=then_minutes, audio=audio))
 
-    def extend(self, source: Path, output: Path, minutes: float, owner: str, cfg: dict | None) -> Job:
+    def extend(self, source: Path, output: Path, minutes: float, owner: str, cfg: dict | None,
+               audio: Path | None = None) -> Job:
         return self._add(Job("extend", f"{source.stem} · {minutes:g} min", owner, output, cfg=cfg,
-                             source=source, minutes=minutes))
+                             source=source, minutes=minutes, audio=audio))
 
     def cancel(self, job: Job) -> None:
         if job.state == "en cola":
@@ -447,6 +459,10 @@ class RenderQueue:
                 job.output.unlink(missing_ok=True)        # archivo a medias: no sirve
             else:
                 job.state = "listo" if code == 0 else "error"
+                if code == 0 and job.kind == "render" and job.then_minutes:
+                    # Encadenado: el render pidió su versión larga al terminar.
+                    self.extend(job.output, long_name(job.output, job.then_minutes), job.then_minutes,
+                                job.owner, job.cfg, job.audio)
             self._save()
 
     def _render(self, job: Job) -> int:
@@ -477,8 +493,20 @@ class RenderQueue:
         job.encoder = f"copia ×{plays} (sin recodificar)"
         job.output.parent.mkdir(parents=True, exist_ok=True)
         cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1",
-               "-stream_loop", str(plays - 1), "-i", str(job.source), "-map", "0", "-c", "copy",
-               "-movflags", "+faststart", str(job.output)]
+               "-stream_loop", str(plays - 1), "-i", str(job.source)]
+        if job.audio:
+            # La música se repite hasta cubrir el vídeo, con fundido de entrada y de salida.
+            # El vídeo se copia tal cual; solo se codifica el audio (AAC).
+            total = plays * loop
+            fade = min(5.0, total / 4)
+            job.encoder += f" + audio {job.audio.name}"
+            cmd += ["-stream_loop", "-1", "-i", str(job.audio), "-map", "0:v:0", "-map", "1:a:0",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-ar", "48000",
+                    "-af", f"afade=t=in:st=0:d=2,afade=t=out:st={total - fade:.3f}:d={fade:.3f}",
+                    "-t", f"{total:.3f}"]
+        else:
+            cmd += ["-map", "0", "-c", "copy"]
+        cmd += ["-movflags", "+faststart", str(job.output)]
         job.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         t0 = time.time()
         for line in job.proc.stdout:

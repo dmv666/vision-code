@@ -67,6 +67,19 @@ Abrir. Para apagar el estudio, cierra su ventana de Terminal.
 - **Galería** de vídeos con reproductor, descarga, «Abrir su escena» (la
   configuración exacta con que se hizo), borrar y **Versión larga**: repite el
   loop 10 min – 3 h sin recodificar (segundos, sin pérdida) para YouTube.
+- **Evolución (∿)**: junto a cada parámetro continuo y a la opacidad de cada
+  capa, el botón ∿ lo hace oscilar un número entero de veces por loop. La escena
+  cambia durante todo el loop en vez de repetirse cada pocos segundos, y sigue
+  cerrando perfecto.
+- **Render + versión larga encadenada**: en «Después» elige «+ versión de 1
+  hora» y al terminar el render se crea sola. Con **Audio** (sube un MP3, WAV,
+  M4A, FLAC...) la música se repite hasta cubrir el vídeo, con fundido de
+  entrada y salida; el vídeo no se recodifica.
+- **▤ Lote**: marca varias escenas y encólalas de una vez, opcionalmente con un
+  destino común (p. ej. YouTube 4K60) y su versión larga.
+- **▶ Kit YouTube**: miniatura 1280×720 lista para subir (eliges el momento del
+  loop, el estilo y el texto) y título, descripción y etiquetas generados a
+  partir de la escena, con botones para copiar.
 - **Deshacer / rehacer** (⌘Z / ⇧⌘Z), **⌘S** para guardar, espacio para
   reproducir y ← → para recorrer el loop.
 - Funciona en el móvil o la tablet: el diseño se adapta a la pantalla.
@@ -299,6 +312,23 @@ paletas, cambia cada 4 compases, justo en el golpe. Una capa con colores propios
 `cycle`. En la interfaz: pestaña **Paleta → Cambio de colores en el loop**, con
 botones para girar los tonos de la base o elegir presets al azar. Ejemplo:
 `configs/showcase/prism_shift.json`.
+
+**Evolución de parámetros (`modulate`).** En `geometry` o en cualquier capa:
+
+```json
+{ "pattern": "julia_bloom",
+  "params": { "radius": 0.76 },
+  "modulate": {
+    "radius":  { "amount": 0.03, "cycles": 1 },
+    "opacity": { "amount": 0.3,  "cycles": 2, "offset": 0.25 }
+  } }
+```
+
+`valor(fase) = base + amount · sin(2π · (cycles · fase + offset))`, con `cycles`
+entero ≥ 1 (ciclos por loop), así que el loop sigue cerrando. Pensado para loops
+largos: con `bars` alto y `cycles: 1` la escena tarda todo el loop en ir y volver.
+Úsalo en parámetros continuos; en los enteros (`segments`, `sides`...) el valor
+saltaría de golpe.
 
 Las velocidades se expresan en unidades "humanas" (por segundo / BPM) y
 `loop.py` las ajusta al entero de ciclos más cercano, también por capa.

@@ -160,7 +160,11 @@ def layers_of(cfg: dict) -> list[dict]:
     """Normaliza a lista de capas. Cada capa: pattern, params, opacity, palette, animation."""
     if cfg.get("layers"):
         return cfg["layers"]
-    return [{"pattern": cfg["geometry"]["pattern"], "params": cfg["geometry"].get("params") or {}}]
+    g = cfg["geometry"]
+    layer = {"pattern": g["pattern"], "params": g.get("params") or {}}
+    if g.get("modulate"):
+        layer["modulate"] = g["modulate"]
+    return [layer]
 
 
 def wants_hardware(out: dict) -> bool:
@@ -200,7 +204,10 @@ def validate(cfg: dict) -> None:
     if anim["bars"] is not None and float(anim["bpm"]) <= 0:
         raise ConfigError("animation.bars requiere animation.bpm > 0")
     from .palette import resolve_color_cycle   # import tardío: palette no depende de config
+    from .patterns import resolve_modulation, resolve_pattern
     try:
         resolve_color_cycle(cfg["palette"])
+        for layer in layers:
+            resolve_modulation(layer, resolve_pattern(layer)[1])
     except ValueError as e:
         raise ConfigError(str(e)) from None

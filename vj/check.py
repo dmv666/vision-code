@@ -21,8 +21,11 @@ def measure_loop(renderer: Renderer) -> dict:
     plan = renderer.plan
     n = plan.frames
     f0, f1, f_last = (renderer.render(i) for i in (0, 1, n - 1))
-    f_n = renderer.render(n, wrap=False)  # fase 1.0 real, no envuelta a 0
-    diff = _delta(f0, f_n)
+    # Fase 1.0 real (no envuelta a 0) contra fase 0.0, ambas sin motion blur: los
+    # sub-frames caerían en 1.004 vs 0.004, que en float32 no son el mismo número
+    # y en shaders caóticos (fractales) cambian píxeles aunque el loop sea perfecto.
+    # En el render real la fase siempre se envuelve, así que ese caso no existe.
+    diff = _delta(renderer.render(0, still=True), renderer.render(n, wrap=False, still=True))
     result = {
         "mean": float(diff.mean()),
         "max": int(diff.max()),
