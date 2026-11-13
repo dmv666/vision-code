@@ -66,6 +66,19 @@ AUDIO_EXT = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".aif", "
 MAX_AUDIO = 400 * 1024 * 1024
 
 
+class QuietServer(ThreadingHTTPServer):
+    """El navegador corta conexiones a menudo (pestaña cerrada, vista previa
+    cancelada al mover un control, keep-alive que caduca). No es un error del
+    estudio: no se imprime la traza."""
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, TimeoutError, ssl.SSLError)):
+            return
+        super().handle_error(request, client_address)
+
+
 class HTTPError(Exception):
     def __init__(self, code: int, msg: str):
         super().__init__(msg)
@@ -826,7 +839,7 @@ def main(argv=None) -> int:
     local_url = f"{scheme}://127.0.0.1:{args.port}/"
 
     try:
-        srv = ThreadingHTTPServer((bind, args.port), Handler)
+        srv = QuietServer((bind, args.port), Handler)
     except OSError:
         # Ya hay una interfaz abierta en ese puerto (doble clic dos veces): reutilizarla.
         print(f"[vj] la interfaz ya está abierta en {local_url}")
