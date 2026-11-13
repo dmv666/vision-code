@@ -75,6 +75,12 @@ Abrir. Para apagar el estudio, cierra su ventana de Terminal.
   hora» y al terminar el render se crea sola. Con **Audio** (sube un MP3, WAV,
   M4A, FLAC...) la música se repite hasta cubrir el vídeo, con fundido de
   entrada y salida; el vídeo no se recodifica.
+- **∞ Mix**: un vídeo largo que pasa por varias escenas con fundidos, sin
+  cortes. Eliges las escenas y su orden, la duración total, cuánto dura cada
+  una, el fundido, el destino y el audio; una línea de tiempo muestra el montaje.
+  Solo se renderiza cada loop y cada fundido una vez (y se guardan para el
+  siguiente mix); el resto se monta sin recodificar. Con «Termina volviendo al
+  inicio» el mix entero es a su vez un loop.
 - **▤ Lote**: marca varias escenas y encólalas de una vez, opcionalmente con un
   destino común (p. ej. YouTube 4K60) y su versión larga.
 - **▶ Kit YouTube**: miniatura 1280×720 lista para subir (eliges el momento del
@@ -329,6 +335,23 @@ entero ≥ 1 (ciclos por loop), así que el loop sigue cerrando. Pensado para lo
 largos: con `bars` alto y `cycles: 1` la escena tarda todo el loop en ir y volver.
 Úsalo en parámetros continuos; en los enteros (`segments`, `sides`...) el valor
 saltaría de golpe.
+
+**Mix desde la terminal.** `python -m vj.mix mix.json -o renders/mix.mp4`
+(`--plan` solo muestra el montaje):
+
+```json
+{ "scenes": ["configs/exotic/julia_bloom.json", "configs/exotic/escher_infinity.json",
+             "configs/exotic/gyroid_cathedral.json"],
+  "output": { "width": 3840, "height": 2160, "fps": 60, "codec": "hevc", "quality": "high" },
+  "minutes": 60, "scene_minutes": 5, "transition": 6, "loop_back": true }
+```
+
+Cada tramo son `n` repeticiones enteras del loop de una escena. En el fundido
+X→Y, X sigue desde su fase 0 mientras Y entra con sus últimos `transition`
+segundos, así que Y termina el fundido exactamente en su fase 0 y enlaza con su
+propio loop. Todas las piezas comparten `output`, por eso se pueden unir sin
+recodificar. Las piezas se guardan en `.studio/mix_cache` (se borran solas a
+los 14 días sin uso).
 
 Las velocidades se expresan en unidades "humanas" (por segundo / BPM) y
 `loop.py` las ajusta al entero de ciclos más cercano, también por capa.

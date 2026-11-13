@@ -351,3 +351,19 @@ pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 
 .kit-copy { float: right; }
 .kit #kit-download { margin-top: 12px; width: 100%; }
 @media (max-width: 860px) { .kit { grid-template-columns: 1fr; } }
+
+/* Mix de escenas */
+.mix { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; }
+.mix h4 { margin: 10px 0 0; font-size: 13px; }
+.mix .batch-list { max-height: 52vh; }
+.mix-order { min-height: 44px; max-height: 24vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px; margin: 10px 0; }
+.mix-order .item { display: flex; align-items: center; gap: 8px; padding: 3px 4px; }
+.mix-order .item .n { color: var(--muted); width: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+.mix-order .item .sw { width: 10px; height: 10px; border-radius: 3px; }
+.mix-order .item .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mix-order .empty { color: var(--muted); padding: 8px; }
+.mix-opts input[type=text] { width: 130px; margin: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; }
+.mix-opts .toggle input { width: auto; margin: 0; }
+.mix-timeline { display: flex; height: 16px; border-radius: 5px; overflow: hidden; margin: 14px 0 6px; background: var(--bg); border: 1px solid var(--line); }
+.mix-timeline span { min-width: 1px; border-right: 1px solid rgba(0,0,0,.45); }
+@media (max-width: 860px) { .mix { grid-template-columns: 1fr; } }

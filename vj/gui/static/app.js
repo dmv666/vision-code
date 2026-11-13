@@ -1024,7 +1024,7 @@ function notifyTransitions(jobs) {
     if (!prev || prev === j.state || !ACTIVE.includes(prev)) continue;
     if (j.state === "listo") {
       refresh = true;
-      const what = j.kind === "extend" ? "Versión larga lista" : "Render listo";
+      const what = j.kind === "extend" ? "Versión larga lista" : j.mix ? "Mix listo" : "Render listo";
       toast(`✓ ${what}: ${j.name}`, "ok", j.media ? { label: "Ver", fn: () => openPlayerByPath(j.media) } : null, 0);
       if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
         try { new Notification(`Prism Loops: ${what.toLowerCase()}`, { body: j.name }); } catch { /* sin permiso */ }
@@ -1076,7 +1076,7 @@ function jobRow(j) {
     ? (j.total ? `${fmtTime(j.frame)} de ${fmtTime(j.total)}` : "")
     : (j.total ? `frame ${j.frame}/${j.total}` : "");
   return el("div", { class: "job" },
-    el("div", { class: "job-head" }, el("span", { class: "name" }, (j.kind === "extend" ? "⟳ " : "") + j.name),
+    el("div", { class: "job-head" }, el("span", { class: "name" }, (j.kind === "extend" ? "⟳ " : j.mix ? "∞ " : "") + j.name),
       isAdmin() && state.me.shared && j.owner !== "local" ? el("span", { class: "badge" }, j.owner) : null,
       el("span", { class: "badge " + j.state }, j.state),
       j.kind === "render" && j.then_minutes ? el("span", { class: "badge", title: "Al terminar se crea la versión larga" },
@@ -1359,6 +1359,111 @@ async function startBatch() {
   finally { $("#batch-go").disabled = false; }
 }
 
+// ------------------------------------------------------------------ mix de escenas
+const MIX_COLORS = ["#7b2cff", "#00e5ff", "#ff2bd6", "#ffb000", "#3ee08f", "#2f6bff", "#ff5470", "#ccff00"];
+const mixState = { paths: [], timer: null, seq: 0 };
+
+function openMix() {
+  const list = $("#mix-list");
+  list.replaceChildren();
+  const groups = {};
+  for (const c of state.configs) (groups[c.group] ??= []).push(c);
+  for (const [g, items] of Object.entries(groups)) {
+    list.append(el("h5", {}, g), ...items.map((c) => {
+      const box = el("input", { type: "checkbox", "data-path": c.path });
+      box.checked = mixState.paths.includes(c.path);
+      box.addEventListener("change", () => {
+        if (box.checked) mixState.paths.push(c.path);
+        else mixState.paths = mixState.paths.filter((p) => p !== c.path);
+        renderMixOrder();
+      });
+      return el("label", {}, box, c.name.replaceAll("_", " "));
+    }));
+  }
+  mixState.paths = mixState.paths.filter((p) => configInfo(p));
+  const presets = state.meta.export_presets;
+  $("#mix-preset").replaceChildren(...presets.map((ex, i) => el("option", { value: i }, ex.label)));
+  $("#mix-preset").value = store.get("vj.mixpreset") ?? "0";
+  if (!$("#mix-preset").value) $("#mix-preset").value = "0";
+  $("#mix-audio").value = $("#render-audio").value;
+  renderMixOrder();
+  $("#dlg-mix").showModal();
+}
+
+function renderMixOrder() {
+  const box = $("#mix-order"), paths = mixState.paths;
+  box.replaceChildren();
+  if (!paths.length) box.append(el("div", { class: "empty" }, "Marca al menos dos escenas a la izquierda."));
+  paths.forEach((p, i) => {
+    const move = (d) => {
+      const j = i + d;
+      if (j < 0 || j >= paths.length) return;
+      [paths[i], paths[j]] = [paths[j], paths[i]];
+      renderMixOrder();
+    };
+    box.append(el("div", { class: "item" }, el("span", { class: "n" }, i + 1),
+      el("span", { class: "sw", style: `background:${MIX_COLORS[i % MIX_COLORS.length]}` }),
+      el("span", { class: "t" }, (configInfo(p)?.name || p).replaceAll("_", " ")),
+      el("button", { class: "small ghost", title: "Antes", onclick: () => move(-1) }, "↑"),
+      el("button", { class: "small ghost", title: "Después", onclick: () => move(1) }, "↓"),
+      el("button", { class: "small ghost danger", title: "Quitar", onclick: () => {
+        mixState.paths = paths.filter((x) => x !== p);
+        const cb = [...document.querySelectorAll("#mix-list input[data-path]")].find((b) => b.dataset.path === p);
+        if (cb) cb.checked = false;
+        renderMixOrder();
+      } }, "✕")));
+  });
+  $("#mix-go").disabled = paths.length < 2;
+  clearTimeout(mixState.timer);
+  mixState.timer = setTimeout(updateMixPlan, 250);
+}
+
+function mixBody() {
+  const o = clone(state.meta.export_presets[Number($("#mix-preset").value) || 0].output);
+  o.motion_blur ??= { samples: 1, shutter: 0.5 };
+  return { paths: mixState.paths, output: o, minutes: Number($("#mix-minutes").value),
+           scene_minutes: Number($("#mix-scene").value), transition: Number($("#mix-fade").value),
+           loop_back: $("#mix-loop").checked, audio: $("#mix-audio").value || null,
+           name: $("#mix-name").value.trim() || "mix" };
+}
+
+async function updateMixPlan() {
+  const sum = $("#mix-summary"), tl = $("#mix-timeline"), go = $("#mix-go");
+  go.disabled = mixState.paths.length < 2;
+  tl.replaceChildren();
+  if (mixState.paths.length < 2) { sum.textContent = ""; return; }
+  const seq = ++mixState.seq;
+  try {
+    const p = await api("/api/mix-plan", mixBody());
+    if (seq !== mixState.seq) return;
+    for (const [i, b] of p.timeline.entries()) {
+      const end = i + 1 < p.timeline.length ? p.timeline[i + 1].start : p.duration;
+      tl.append(el("span", { style: `flex:${end - b.start};background:${MIX_COLORS[b.scene % MIX_COLORS.length]}`,
+                             title: `${p.names[b.scene].replaceAll("_", " ")} · desde ${fmtTime(b.start)} · loop ×${b.plays}` }));
+    }
+    sum.textContent = `Duración real ${fmtTime(p.duration)} · ${p.blocks} tramos · se renderizan ${p.render_frames.toLocaleString()} frames ` +
+      `(${p.loops.length} loops + fundidos); las piezas ya renderizadas se reutilizan.`;
+    sum.classList.remove("warn");
+  } catch (e) {
+    if (seq !== mixState.seq) return;
+    sum.textContent = "⚠ " + e.message;
+    sum.classList.add("warn");
+    go.disabled = true;
+  }
+}
+
+async function startMix() {
+  $("#mix-go").disabled = true;
+  try {
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    await api("/api/mix", mixBody());
+    $("#dlg-mix").close();
+    toast("Mix en cola", "ok");
+    pollJobs(true);
+  } catch (e) { toast(e.message, "bad", null, 8000); }
+  finally { $("#mix-go").disabled = false; }
+}
+
 // ------------------------------------------------------------------ kit de YouTube
 const PATTERN_COPY = {
   kaleidoscope: ["an infinite kaleidoscope zoom of neon geometry", ["kaleidoscope", "mandala"]],
@@ -1628,6 +1733,10 @@ function bindUi() {
   for (const b of document.querySelectorAll(".btn-audio-upload")) b.addEventListener("click", () => $("#audio-file").click());
   $("#audio-file").addEventListener("change", (e) => { uploadAudio(e.target.files[0]); e.target.value = ""; });
   $("#btn-batch").addEventListener("click", openBatch);
+  $("#btn-mix").addEventListener("click", openMix);
+  $("#mix-go").addEventListener("click", startMix);
+  for (const id of ["mix-minutes", "mix-scene", "mix-fade", "mix-preset", "mix-loop"])
+    $("#" + id).addEventListener("change", () => { store.set("vj.mixpreset", $("#mix-preset").value); updateMixPlan(); });
   $("#batch-go").addEventListener("click", startBatch);
   $("#btn-kit").addEventListener("click", () => openKit(clone(state.cfg), sceneName()));
   $("#player-kit").addEventListener("click", async () => {

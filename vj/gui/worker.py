@@ -302,7 +302,7 @@ class Job:
 
     def __init__(self, kind: str, name: str, owner: str, output: Path, cfg: dict | None = None,
                  source: Path | None = None, minutes: float | None = None,
-                 then_minutes: float | None = None, audio: Path | None = None):
+                 then_minutes: float | None = None, audio: Path | None = None, spec: dict | None = None):
         self.id = next(self._ids)
         self.kind = kind                  # "render" | "extend"
         self.name = name
@@ -313,6 +313,7 @@ class Job:
         self.minutes = minutes
         self.then_minutes = then_minutes  # render: al terminar, crear versión larga de N minutos
         self.audio = audio                # pista de audio para la versión larga
+        self.spec = spec                  # render de tipo mix: varias escenas con fundidos (vj.mix)
         self.state = "en cola"
         self.frame = 0
         self.total = 0
@@ -331,9 +332,10 @@ class Job:
     def to_dict(self, with_cfg: bool = False) -> dict:
         d = {k: getattr(self, k) for k in self.FIELDS} | {
             "output": str(self.output), "source": str(self.source) if self.source else None, "log": self.log[-12:],
-            "audio": str(self.audio) if self.audio else None}
+            "audio": str(self.audio) if self.audio else None, "mix": bool(self.spec)}
         if with_cfg:
             d["cfg"] = self.cfg
+            d["spec"] = self.spec
         return d
 
     @classmethod
@@ -345,6 +347,7 @@ class Job:
         job.source = Path(d["source"]) if d.get("source") else None
         job.audio = Path(d["audio"]) if d.get("audio") else None
         job.cfg = d.get("cfg")
+        job.spec = d.get("spec")
         job.log = d.get("log", [])
         job.proc = None
         if job.state in ACTIVE:                 # el servidor se cerró a mitad de trabajo
@@ -420,6 +423,12 @@ class RenderQueue:
                audio: Path | None = None) -> Job:
         return self._add(Job("render", name, owner, output, cfg=cfg, then_minutes=then_minutes, audio=audio))
 
+    def submit_mix(self, spec: dict, output: Path, name: str, owner: str) -> Job:
+        """Mix: se encola como un render más. `cfg` es la primera escena (para la
+        miniatura y «Abrir su escena»); el montaje completo va en `spec`."""
+        first = {**spec["scenes"][0], "output": {**spec["scenes"][0].get("output", {}), **spec.get("output", {})}}
+        return self._add(Job("render", name, owner, output, cfg=first, spec=spec))
+
     def extend(self, source: Path, output: Path, minutes: float, owner: str, cfg: dict | None,
                audio: Path | None = None) -> Job:
         return self._add(Job("extend", f"{source.stem} · {minutes:g} min", owner, output, cfg=cfg,
@@ -469,9 +478,14 @@ class RenderQueue:
         tmp = self.studio / "jobs"
         tmp.mkdir(parents=True, exist_ok=True)
         cfg_file = tmp / f"job_{job.id}.json"
-        cfg_file.write_text(json.dumps(job.cfg, indent=2, ensure_ascii=False), encoding="utf-8")
         job.output.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [sys.executable, "-u", "-m", "vj", str(cfg_file), "-o", str(job.output)]
+        if job.spec:
+            cfg_file.write_text(json.dumps(job.spec, ensure_ascii=False), encoding="utf-8")
+            cmd = [sys.executable, "-u", "-m", "vj.mix", str(cfg_file), "-o", str(job.output),
+                   "--cache", str(self.studio / "mix_cache")]
+        else:
+            cfg_file.write_text(json.dumps(job.cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+            cmd = [sys.executable, "-u", "-m", "vj", str(cfg_file), "-o", str(job.output)]
         env = {**os.environ, "PYTHONUNBUFFERED": "1"}
         try:
             job.proc = subprocess.Popen(cmd, cwd=self.workdir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from ..config import ConfigError, config_from_dict, layers_of
 from ..encoder import CONTAINER
 from ..loop import plan_loop
+from .. import mix
 from . import generator, schema
 from .auth import COOKIE, LOCAL, SESSION_DAYS, Auth, AuthError, Limits, User
 from .worker import CODE_ROOT, PreviewEngine, RenderQueue, long_name, probe_duration, video_thumbnail
@@ -571,6 +572,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._render(user, body)
         if path == "/api/extend":
             return self._extend(user, body)
+        if path == "/api/mix-plan":
+            spec, names = self._mix_spec(user, body)
+            return self._json(mix.summary(spec) | {"names": names})
+        if path == "/api/mix":
+            return self._mix(user, body)
         if path == "/api/render-batch":
             return self._render_batch(user, body)
         if path == "/api/delete-audio":
@@ -654,6 +660,49 @@ class Handler(BaseHTTPRequestHandler):
         job = app.queue.submit(body["config"], out, safe_name(str(body.get("name", "render")), "render"), user.name,
                                self._extend_minutes(user, body.get("extend_minutes")),
                                self._resolve_audio(user, body.get("audio")))
+        return self._json(self._job_dict(job, user))
+
+    def _mix_spec(self, user: User, body: dict) -> tuple[dict, list[str]]:
+        """Montaje de un mix a partir de escenas guardadas, validado y con límites."""
+        app = self.app
+        paths = body["paths"]
+        if not isinstance(paths, list) or not 2 <= len(paths) <= 40:
+            raise HTTPError(400, "elige entre 2 y 40 escenas")
+        output = body.get("output") if isinstance(body.get("output"), dict) else {}
+        output = {k: v for k, v in output.items() if k not in ("path", "duration")}
+        scenes = [json.loads(self._resolve_config(user, str(rel)).read_text(encoding="utf-8")) for rel in paths]
+        minutes = self._extend_minutes(user, body.get("minutes", 60)) or 60.0
+        spec = {"scenes": scenes, "output": output, "minutes": minutes,
+                "scene_minutes": float(body.get("scene_minutes", 5)), "transition": float(body.get("transition", 6)),
+                "loop_back": bool(body.get("loop_back", True))}
+        if not 0.2 <= spec["scene_minutes"] <= 120 or not 0 <= spec["transition"] <= 60:
+            raise HTTPError(400, "minutos por escena entre 0.2 y 120; fundido entre 0 y 60 s")
+        try:
+            for cfg in (mix.scene_config(sc, output) for sc in scenes):
+                if not user.admin:
+                    app.limits.enforce(cfg)
+        except mix.MixError as e:
+            raise HTTPError(400, str(e)) from None
+        audio = self._resolve_audio(user, body.get("audio"))
+        if audio:
+            spec["audio"] = str(audio)
+        return spec, [Path(str(rel)).stem for rel in paths]
+
+    def _mix(self, user: User, body: dict) -> None:
+        app = self.app
+        spec, _ = self._mix_spec(user, body)
+        try:
+            mix.plan_mix(spec)
+        except mix.MixError as e:
+            raise HTTPError(400, str(e)) from None
+        if not user.admin and app.queue.active_count(user.name) >= app.limits.max_jobs:
+            raise HTTPError(429, f"ya tienes {app.limits.max_jobs} renders en cola; espera a que termine alguno")
+        name = safe_name(str(body.get("name") or "mix"), "mix")
+        codec = config_from_dict({"output": spec["output"]})["output"]["codec"]
+        out = self._output_path(user, name if not user.admin else f"renders/{name}", codec)
+        if app.queue.busy(out):
+            raise HTTPError(409, "ya hay un trabajo escribiendo ese archivo")
+        job = app.queue.submit_mix(spec, out, name, user.name)
         return self._json(self._job_dict(job, user))
 
     def _render_batch(self, user: User, body: dict) -> None:

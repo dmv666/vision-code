@@ -104,6 +104,7 @@
             <select id="render-audio" class="audio-select"></select></label>
           <button class="ghost small btn-audio-upload" title="Subir un archivo de audio">⬆ Audio</button>
           <span class="spacer"></span>
+          <button id="btn-mix" class="ghost small" title="Un vídeo largo que pasa por varias escenas con fundidos">∞ Mix…</button>
           <button id="btn-batch" class="ghost small" title="Renderizar varias escenas de una vez">▤ Lote…</button>
           <button id="btn-kit" class="ghost small" title="Miniatura, título y descripción para YouTube">▶ Kit YouTube</button>
         </div>
@@ -227,6 +228,43 @@
   </div>
   <menu><span id="batch-count" class="hint tight"></span><span class="spacer"></span>
     <button id="batch-go" class="primary">Encolar</button></menu>
+</dialog>
+
+<dialog id="dlg-mix" class="wide">
+  <div class="dlg-head">
+    <h3>Mix de escenas</h3>
+    <button class="ghost icon" data-close title="Cerrar">✕</button>
+  </div>
+  <p class="hint tight">Un vídeo largo que va pasando por varias escenas con fundidos, sin cortes. Solo se renderiza cada loop y cada fundido una vez; el resto se monta sin recodificar.</p>
+  <div class="mix">
+    <div>
+      <h4>1 · Elige las escenas</h4>
+      <div id="mix-list" class="batch-list"></div>
+    </div>
+    <div>
+      <h4>2 · Orden</h4>
+      <div id="mix-order" class="mix-order"></div>
+      <div class="batch-opts mix-opts">
+        <label>Duración <select id="mix-minutes">
+          <option value="10">10 min</option><option value="30">30 min</option><option value="60" selected>1 hora</option>
+          <option value="120">2 horas</option><option value="180">3 horas</option></select></label>
+        <label>Cada escena <select id="mix-scene">
+          <option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option>
+          <option value="5" selected>5 min</option><option value="10">10 min</option><option value="15">15 min</option></select></label>
+        <label>Fundido <select id="mix-fade">
+          <option value="0">corte seco</option><option value="3">3 s</option><option value="6" selected>6 s</option>
+          <option value="10">10 s</option><option value="15">15 s</option></select></label>
+        <label>Destino <select id="mix-preset"></select></label>
+        <label>Audio <select id="mix-audio" class="audio-select"></select></label>
+        <label>Nombre <input id="mix-name" type="text" value="mix" pattern="[A-Za-z0-9_\-]+"></label>
+        <label class="toggle" title="El último fundido vuelve a la primera escena: el vídeo entero se puede repetir sin corte">
+          <input id="mix-loop" type="checkbox" checked> Termina volviendo al inicio</label>
+      </div>
+      <div id="mix-timeline" class="mix-timeline"></div>
+      <p id="mix-summary" class="hint tight"></p>
+    </div>
+  </div>
+  <menu><span class="spacer"></span><button id="mix-go" class="primary">Crear mix</button></menu>
 </dialog>
 
 <dialog id="dlg-kit" class="wide">
